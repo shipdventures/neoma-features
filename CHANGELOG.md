@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Husky + lint-staged pre-commit hook — runs `eslint --fix` on staged `.ts` and `.mjs` files
+
 ## [0.4.1] - 2026-04-12
 
 ### Added
