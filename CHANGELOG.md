@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Six stricter TypeScript-ESLint rules: `consistent-type-imports`, `no-misused-promises`, `switch-exhaustiveness-check`, `return-await`, `prefer-nullish-coalescing`, `prefer-optional-chain`
+- `@lib` pathGroups config for `import-x/order` to sort alias imports as internal
+- `prefer-inline` option on `import-x/no-duplicates` to pair with inline type imports
+
 ## [0.4.0] - 2026-04-12
 
 ### Changed

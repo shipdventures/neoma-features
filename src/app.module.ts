@@ -1,6 +1,7 @@
-import { ExampleModule } from "@lib"
 import { Module } from "@nestjs/common"
 import { TypeOrmModule } from "@nestjs/typeorm"
+
+import { ExampleModule } from "@lib"
 
 import { AppController } from "./app.controller"
 
