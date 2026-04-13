@@ -1,19 +1,20 @@
 {
-  "name": "@neoma/package-template",
+  "name": "@neoma/features",
   "version": "0.1.0",
-  "description": "{{PACKAGE_DESCRIPTION}}",
+  "description": "Feature flagging for NestJS controllers — gate routes behind binary on/off flags",
   "author": "Shipdventures",
   "repository": {
     "type": "git",
-    "url": "{{REPO_URL}}"
+    "url": "https://github.com/shipdventures/neoma-features"
   },
   "bugs": {
-    "url": "{{REPO_URL}}/issues"
+    "url": "https://github.com/shipdventures/neoma-features/issues"
   },
-  "homepage": "{{REPO_URL}}#readme",
+  "homepage": "https://github.com/shipdventures/neoma-features#readme",
   "keywords": [
     "nestjs",
-    "package-template",
+    "features",
+    "feature-flags",
     "laravel",
     "neoma"
   ],

@@ -1,15 +1,15 @@
 {
-  "name": "neoma-package-template",
+  "name": "neoma-features",
   "engines": {
     "node": ">=22.0.0"
   },
-  "version": "0.4.2",
+  "version": "0.1.0",
   "description": "",
   "author": "",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "build": "tsc -p ./libs/package-template/tsconfig.lib.json",
+    "build": "tsc -p ./libs/features/tsconfig.lib.json",
     "lint": "eslint .",
     "prepare": "husky",
     "test": "node node_modules/.bin/jest --watch --runInBand",
@@ -88,8 +88,8 @@
     ],
     "moduleNameMapper": {
       "fixtures/(.*)$": "<rootDir>/fixtures/$1",
-      "@lib/(.*)$": "<rootDir>/libs/package-template/src/$1",
-      "@lib": "<rootDir>/libs/package-template/src"
+      "@lib/(.*)$": "<rootDir>/libs/features/src/$1",
+      "@lib": "<rootDir>/libs/features/src"
     }
   }
 }

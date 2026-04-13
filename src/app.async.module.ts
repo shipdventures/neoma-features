@@ -7,13 +7,15 @@ import { GatedController } from "./gated.controller"
 
 @Module({
   imports: [
-    FeaturesModule.forRoot({
-      flags: {
-        ENABLED_FEATURE: true,
-        DISABLED_FEATURE: false,
-      },
+    FeaturesModule.forRootAsync({
+      useFactory: () => ({
+        flags: {
+          ENABLED_FEATURE: true,
+          DISABLED_FEATURE: false,
+        },
+      }),
     }),
   ],
   controllers: [AppController, GatedController],
 })
-export class AppModule {}
+export class AsyncAppModule {}
