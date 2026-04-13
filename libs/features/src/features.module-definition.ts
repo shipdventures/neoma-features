@@ -18,8 +18,8 @@ export const {
   // via APP_GUARD and must be able to resolve FEATURES_OPTIONS from any
   // module in the application without requiring each module to re-import
   // FeaturesModule.
-  .setExtras({ isGlobal: true }, (definition, extras) => ({
+  .setExtras({}, (definition) => ({
     ...definition,
-    global: extras.isGlobal,
+    global: true,
   }))
   .build()
