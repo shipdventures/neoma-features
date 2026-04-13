@@ -1,239 +1,223 @@
-# Neoma Package Template
+# @neoma/features
 
-Template for creating new Neoma packages with consistent structure, configuration, and testing setup.
+> Feature flag gating for NestJS applications
 
-## Creating a New Package
+Gate routes and controllers behind feature flags with a single decorator. Disabled or missing flags return HTTP 404 as if the route does not exist (fail-closed).
 
-### 1. Copy this template
+## Motivation
 
-```bash
-cd /path/to/wulfstack/packages
-cp -r neoma-package-template neoma-<your-package-name>
-cd neoma-<your-package-name>
-```
+Feature flags let you ship code to production behind a toggle. Without a framework-level solution, every controller ends up with manual `if (flag)` checks that are easy to forget and hard to audit. `@neoma/features` moves gating into the framework layer so your controllers stay clean.
 
-### 2. Replace placeholders
+## The Problem
 
-Search and replace throughout the project:
-- `{{PACKAGE_NAME}}` → Your package name (e.g., "garmr", "validation")
-- `{{PACKAGE_DESCRIPTION}}` → Short description
-- `{{REPO_URL}}` → GitHub repository URL (e.g., "https://github.com/shipdventures/neoma-garmr")
+**Without this package:**
 
-**Quick find/replace:**
-```bash
-# macOS/Linux
-find . -type f -name "*.json" -o -name "*.md" -o -name "*.ts" | xargs sed -i '' 's/{{PACKAGE_NAME}}/your-package-name/g'
-find . -type f -name "*.json" -o -name "*.md" -o -name "*.ts" | xargs sed -i '' 's/{{PACKAGE_DESCRIPTION}}/Your description/g'
-find . -type f -name "*.json" -o -name "*.md" -o -name "*.ts" | xargs sed -i '' 's|{{REPO_URL}}|https://github.com/your-org/your-repo|g'
-```
-
-### 3. Rename directories
-
-```bash
-mv libs/package-template libs/your-package-name
-```
-
-### 4. Install dependencies
-
-```bash
-npm install
-```
-
-### 5. Start building!
-
-```bash
-npm test        # Unit tests (TDD)
-npm run test:e2e # E2E tests
-npm run build   # Build library
-npm run lint    # Lint code
-```
-
-## Package Structure
-
-```
-neoma-<package-name>/
-├── libs/
-│   └── <package-name>/           # The npm package
-│       ├── src/
-│       │   ├── modules/          # NestJS modules
-│       │   ├── decorators/       # Custom decorators
-│       │   ├── middlewares/      # Middleware
-│       │   ├── guards/           # Guards
-│       │   ├── services/         # Services
-│       │   ├── interfaces/       # TypeScript interfaces
-│       │   ├── constants/        # Constants
-│       │   └── index.ts          # Public API exports
-│       ├── package.json          # Published package.json
-│       └── tsconfig.lib.json     # Library TypeScript config
-├── src/                          # Example/test application
-│   ├── app.module.ts
-│   └── ...
-├── specs/                        # E2E tests
-│   ├── jest-e2e.json
-│   └── *.e2e-spec.ts
-├── fixtures/                     # Test fixtures and utilities
-│   ├── app/                      # Test app lifecycle management
-│   ├── database/                 # In-memory database setup
-│   ├── models/                   # Model factory patterns
-│   ├── matchers/                 # Custom Jest matchers
-│   └── e2e-setup.js              # E2E build hook
-├── package.json                  # Development package.json
-├── tsconfig.json                 # Root TypeScript config
-├── eslint.config.mjs             # ESLint config
-├── .prettierrc                   # Prettier config
-├── .gitignore
-├── .nvmrc
-├── LICENSE
-└── README.md                     # Package documentation
-```
-
-## Testing Strategy
-
-### E2E Tests (`specs/`)
-- One file per major feature or configuration
-- Tests full install experience and integration
-- Uses real NestJS app, real database
-- Proves README instructions work
-
-**Example**: The template includes `specs/app.e2e-spec.ts` demonstrating how to test endpoints using `managedAppInstance()` and supertest.
-
-### Unit Tests (`libs/<package>/src/**/*.spec.ts`)
-- TDD: Drive implementation
-- Test individual classes/functions
-- Fast feedback loop
-- Test edge cases and error handling
-
-**Example**: The template includes `libs/package-template/src/modules/example.module.spec.ts` showing how to test NestJS modules.
-
-### Complete Testing Flow
-
-1. **Write library code** in `libs/package-template/src/`
-2. **Write unit tests** alongside your code (`*.spec.ts`)
-3. **Export from** `libs/package-template/src/index.ts`
-4. **Import in** `src/app.module.ts` for E2E testing
-5. **Write E2E tests** in `specs/` to validate integration
-
-The template includes working examples of all these steps with `ExampleModule`.
-
-**Don't test the same config twice** - E2E covers integration, unit tests cover logic.
-
-## Testing Infrastructure
-
-The template includes ready-to-use testing utilities in the `fixtures/` directory:
-
-### App Lifecycle (`fixtures/app`)
 ```typescript
-import { managedAppInstance } from "fixtures/app"
-
-describe("My E2E Test", () => {
-  it("should work", async () => {
-    const app = managedAppInstance()
-    // App is automatically initialized before each test
-    // and cleaned up after each test
-  })
-})
+@Controller("bank-statements")
+export class BankStatementsController {
+  @Post("upload")
+  async upload(@Body() dto: UploadDto) {
+    if (!this.config.get("FEATURE_UPLOAD_BANK_STATEMENT")) {
+      throw new NotFoundException()
+    }
+    // actual logic...
+  }
+}
 ```
 
-### Database Setup (`fixtures/database`)
+Every route needs its own guard logic. Miss one and a half-built feature leaks to production.
+
+## The Solution
+
+**With this package:**
+
 ```typescript
-import { managedDatasourceInstance } from "fixtures/database"
-
-describe("My Database Test", () => {
-  it("should query database", async () => {
-    const datasource = managedDatasourceInstance()
-    // Fresh in-memory SQLite database for each test
-    // Automatically destroyed after each test
-  })
-})
+@Controller("bank-statements")
+export class BankStatementsController {
+  @Post("upload")
+  @Feature("UPLOAD_BANK_STATEMENT")
+  async upload(@Body() dto: UploadDto) {
+    // Only reachable when UPLOAD_BANK_STATEMENT is true
+  }
+}
 ```
 
-### Model Factories (`fixtures/models`)
-See `fixtures/models/README.md` for the pattern and examples.
+The `@Feature` decorator and a global guard handle gating automatically. No boilerplate, no forgotten checks.
 
-### Custom Matchers (`fixtures/matchers`)
-- `toThrowEquals(error)` - Assert errors match exactly
-- `toEqualError(error)` - Assert errors are equal
-
-### E2E Build Hook (`fixtures/e2e-setup.js`)
-Automatically builds the library before E2E tests run.
-
-## Scripts
-
-- `npm run build` - Build the library
-- `npm run lint` - Lint all code
-- `npm test` - Run unit tests in watch mode
-- `npm run test:e2e` - Run E2E tests in watch mode
-
-## Configuration Highlights
-
-### TypeScript
-- Target: ES2022
-- Strict null checks enabled
-- Decorators enabled
-- No semicolons (enforced)
-
-### ESLint
-- Explicit return types required
-- Explicit member accessibility required
-- No floating promises
-- Prettier integration
-
-### Jest
-- ts-jest for TypeScript
-- jest-extended for additional matchers
-- In-memory SQLite for tests
-- Module path mapping for clean imports
-
-## Example README Structure
-
-When you publish, your README should include:
-
-1. **Motivation** - Why this package exists
-2. **Problem/Solution** - Before/after code examples
-3. **Installation** - Step-by-step setup
-4. **Basic Usage** - Simple examples
-5. **Advanced Usage** - Custom configurations
-6. **API Reference** - All public APIs
-7. **Links** - npm, GitHub, docs
-
-See `@neoma/route-model-binding` README for a good example.
-
-## Publishing Checklist
-
-Before publishing to npm:
-
-- [ ] All tests passing
-- [ ] README is complete
-- [ ] LICENSE file included
-- [ ] Version bumped in both package.json files
-- [ ] Built with `npm run build`
-- [ ] Verify exports in `libs/<package>/src/index.ts`
-- [ ] Test installation in separate project
-- [ ] Verify peer dependencies are correct
+## Installation
 
 ```bash
-cd libs/<your-package-name>
-npm publish --access public
+npm install @neoma/features
 ```
 
-## Neoma Package Standards
+### Peer Dependencies
 
-All Neoma packages should:
-- ✅ Be Laravel-inspired but NestJS-native
-- ✅ Have minimal boilerplate
-- ✅ Include comprehensive tests
-- ✅ Have excellent documentation
-- ✅ Use TypeScript strictly
-- ✅ Follow consistent code style
-- ✅ Be production-ready
+```bash
+npm install @nestjs/common @nestjs/core reflect-metadata rxjs
+```
 
-## Template Improvements (TODO)
+## Basic Usage
 
-Future enhancements to this template:
+### 1. Import the Module
 
-- [ ] **GitHub Issue & PR Templates** - Add `.github/ISSUE_TEMPLATE/` for bug reports and feature requests, plus `.github/pull_request_template.md`
-- [ ] **CONTRIBUTING.md** - Document contribution guidelines, coding standards, and development workflow
-- [ ] **CHANGELOG.md Template** - Add template following Keep a Changelog format
-- [ ] **README Badges** - Add placeholders for CI status, npm version, and license badges
-- [ ] **VSCode Extensions** - Add `.vscode/extensions.json` with recommended extensions for NestJS development
-- [ ] **CODE_OF_CONDUCT.md** - Add community standards if accepting external contributions
+**Static configuration:**
+
+```typescript
+import { Module } from "@nestjs/common"
+import { FeaturesModule } from "@neoma/features"
+
+@Module({
+  imports: [
+    FeaturesModule.forRoot({
+      flags: {
+        UPLOAD_BANK_STATEMENT: true,
+        NEW_DASHBOARD: false,
+      },
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+**Async configuration via DI:**
+
+```typescript
+import { Module } from "@nestjs/common"
+import { ConfigModule, ConfigService } from "@nestjs/config"
+import { FeaturesModule } from "@neoma/features"
+
+@Module({
+  imports: [
+    FeaturesModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (config: ConfigService) => ({
+        flags: {
+          UPLOAD_BANK_STATEMENT: config.get("FEATURE_UPLOAD") === "true",
+          NEW_DASHBOARD: config.get("FEATURE_DASHBOARD") === "true",
+        },
+      }),
+      inject: [ConfigService],
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+The module registers globally by default so you only need to import it once in your root module.
+
+### 2. Decorate Routes
+
+```typescript
+import { Controller, Get, Post, Body } from "@nestjs/common"
+import { Feature } from "@neoma/features"
+
+@Controller("bank-statements")
+export class BankStatementsController {
+  @Post("upload")
+  @Feature("UPLOAD_BANK_STATEMENT")
+  async upload(@Body() dto: UploadDto) {
+    // Only reachable when UPLOAD_BANK_STATEMENT is true
+    // Returns 404 when the flag is false or missing
+  }
+
+  @Get()
+  async list() {
+    // No @Feature -- always accessible
+  }
+}
+```
+
+### 3. Gate an Entire Controller
+
+Apply `@Feature` at the class level to gate all routes on a controller:
+
+```typescript
+import { Controller, Get } from "@nestjs/common"
+import { Feature } from "@neoma/features"
+
+@Controller("dashboard")
+@Feature("NEW_DASHBOARD")
+export class DashboardController {
+  @Get()
+  index() {
+    // Gated behind NEW_DASHBOARD
+  }
+
+  @Get("stats")
+  @Feature("DASHBOARD_STATS")
+  stats() {
+    // Handler-level @Feature overrides the controller-level flag.
+    // This route checks DASHBOARD_STATS, not NEW_DASHBOARD.
+  }
+}
+```
+
+When both the controller and a handler have `@Feature`, the handler-level flag takes priority (most specific wins).
+
+## How It Works
+
+- A global `APP_GUARD` reads `@Feature` metadata from the handler and controller.
+- Handler-level metadata is checked first; if absent, controller-level metadata is used.
+- The flag name is looked up in the `flags` record provided via `forRoot` or `forRootAsync`.
+- If the flag is `true`, the request proceeds normally.
+- If the flag is `false` or absent from the record, the guard throws `NotFoundException` (HTTP 404).
+- Routes without any `@Feature` decorator are always accessible.
+
+### Fail-Closed Semantics
+
+A flag that is not present in the `flags` record is treated as disabled. This means you must explicitly set a flag to `true` to enable a route. This prevents accidentally exposing routes when a flag name is misspelled or forgotten.
+
+## API Reference
+
+### `FeaturesModule`
+
+NestJS module that registers the feature guard globally.
+
+| Method | Description |
+|--------|-------------|
+| `FeaturesModule.forRoot(options)` | Static configuration with a flags record |
+| `FeaturesModule.forRootAsync(options)` | Async configuration via factory, class, or existing provider |
+
+### `FeaturesModuleOptions`
+
+```typescript
+interface FeaturesModuleOptions {
+  /** A record of feature flag names to their enabled/disabled state. */
+  flags: Record<string, boolean>
+}
+```
+
+### `@Feature(flag: string)`
+
+Decorator that marks a controller or route handler as gated behind a feature flag. Can be applied to both classes and methods.
+
+```typescript
+// On a method
+@Feature("MY_FLAG")
+@Get()
+myRoute() {}
+
+// On a controller
+@Feature("MY_FLAG")
+@Controller("my")
+class MyController {}
+```
+
+## License
+
+MIT
+
+## Links
+
+- [GitHub repository](https://github.com/shipdventures/neoma-features)
+- [Issue tracker](https://github.com/shipdventures/neoma-features/issues)
+
+## Part of the Neoma Ecosystem
+
+This package is part of the Neoma ecosystem of Laravel-inspired NestJS packages:
+
+- [@neoma/config](https://github.com/shipdventures/neoma-config) - Type-safe environment configuration
+- [@neoma/logger](https://github.com/shipdventures/neoma-logger) - Request and application logging
+- [@neoma/exception-handling](https://github.com/shipdventures/neoma-exception-handling) - Global exception handling
+- **@neoma/features** - Feature flag gating (you are here)
+- More coming soon...

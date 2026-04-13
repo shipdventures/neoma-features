@@ -17,44 +17,54 @@ appModules.forEach(([name, modulePath]) => {
       app = await managedAppInstance(modulePath)
     })
 
-    describe("Given a route without @Feature", () => {
+    describe("Given a route without the @Feature decorator applied", () => {
       it("Then it should be accessible", async () => {
         const server = app.getHttpServer()
         await request(server).get("/status").expect(NO_CONTENT)
       })
     })
 
-    describe("Given a route with an enabled flag", () => {
-      it("Then it should return 200", async () => {
-        const server = app.getHttpServer()
-        await request(server).get("/enabled").expect(OK)
-      })
-    })
-
-    describe("Given a route with a disabled flag", () => {
-      it("Then it should return 404", async () => {
-        const server = app.getHttpServer()
-        await request(server).get("/disabled").expect(NOT_FOUND)
-      })
-    })
-
-    describe("Given a route with a missing flag", () => {
-      it("Then it should return 404 (fail-closed)", async () => {
-        const server = app.getHttpServer()
-        await request(server).get("/missing").expect(NOT_FOUND)
-      })
-    })
-
-    describe("Given a controller with @Feature(DISABLED)", () => {
-      it("Then all routes return 404", async () => {
-        const server = app.getHttpServer()
-        await request(server).get("/gated").expect(NOT_FOUND)
-      })
-
-      describe("When a handler overrides with @Feature(ENABLED)", () => {
-        it("Then the handler-level flag wins", async () => {
+    describe("Given a route with the @Feature('ENABLED_FEATURE') decorator applied", () => {
+      describe("And with the flag 'ENABLED_FEATURE' set to true", () => {
+        it("Then it should respond with a 200", async () => {
           const server = app.getHttpServer()
-          await request(server).get("/gated/override").expect(OK)
+          await request(server).get("/enabled").expect(OK)
+        })
+      })
+    })
+
+    describe("Given a route with the @Feature('DISABLED_FEATURE') decorator applied", () => {
+      describe("And with the flag 'DISABLED_FEATURE' set to false", () => {
+        it("Then it should respond with a 404", async () => {
+          const server = app.getHttpServer()
+          await request(server).get("/disabled").expect(NOT_FOUND)
+        })
+      })
+    })
+
+    describe("Given a route with the @Feature('MISSING_FEATURE') decorator applied", () => {
+      describe("And with the flag 'MISSING_FEATURE' not set", () => {
+        it("Then it should respond with a 404 (fail-closed)", async () => {
+          const server = app.getHttpServer()
+          await request(server).get("/missing").expect(NOT_FOUND)
+        })
+      })
+    })
+
+    describe("Given a controller with the @Feature('DISABLED_FEATURE') decorator applied", () => {
+      describe("And with the flag 'DISABLED_FEATURE' set to false", () => {
+        it("Then it should respond with a 404", async () => {
+          const server = app.getHttpServer()
+          await request(server).get("/gated").expect(NOT_FOUND)
+        })
+      })
+
+      describe("And a handler overrides with @Feature('ENABLED_FEATURE')", () => {
+        describe("And with the flag 'ENABLED_FEATURE' set to true", () => {
+          it("Then the handler-level flag wins and it should respond with a 200", async () => {
+            const server = app.getHttpServer()
+            await request(server).get("/gated/override").expect(OK)
+          })
         })
       })
     })
