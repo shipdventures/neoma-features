@@ -3,6 +3,8 @@ import { Module } from "@nestjs/common"
 import { FeaturesModule } from "@lib"
 
 import { AppController } from "./app.controller"
+import { GatedEnabledController } from "./gated-enabled.controller"
+import { GatedMissingController } from "./gated-missing.controller"
 import { GatedController } from "./gated.controller"
 
 @Module({
@@ -16,6 +18,11 @@ import { GatedController } from "./gated.controller"
       }),
     }),
   ],
-  controllers: [AppController, GatedController],
+  controllers: [
+    AppController,
+    GatedController,
+    GatedEnabledController,
+    GatedMissingController,
+  ],
 })
 export class AsyncAppModule {}

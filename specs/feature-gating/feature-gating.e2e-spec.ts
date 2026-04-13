@@ -68,5 +68,31 @@ appModules.forEach(([name, modulePath]) => {
         })
       })
     })
+
+    describe("Given a controller with @Feature('ENABLED_FEATURE') set to true", () => {
+      describe("And a handler overrides with @Feature('MISSING_FEATURE')", () => {
+        describe("And with the flag 'MISSING_FEATURE' not set", () => {
+          it("Then the handler-level flag wins and it should respond with a 404", async () => {
+            const server = app.getHttpServer()
+            await request(server)
+              .get("/gated-enabled/handler-missing")
+              .expect(NOT_FOUND)
+          })
+        })
+      })
+    })
+
+    describe("Given a controller with @Feature('MISSING_FEATURE') not set", () => {
+      describe("And a handler overrides with @Feature('ALSO_MISSING')", () => {
+        describe("And with the flag 'ALSO_MISSING' not set", () => {
+          it("Then it should respond with a 404", async () => {
+            const server = app.getHttpServer()
+            await request(server)
+              .get("/gated-missing/handler-also-missing")
+              .expect(NOT_FOUND)
+          })
+        })
+      })
+    })
   })
 })

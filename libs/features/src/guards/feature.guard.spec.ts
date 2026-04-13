@@ -157,5 +157,43 @@ describe("FeatureGuard", () => {
         expect(() => guard.canActivate(ctx)).toThrow(NotFoundException)
       })
     })
+
+    describe("Given @Feature on both and the handler flag is not set", () => {
+      describe("And the controller flag is enabled", () => {
+        it("Then the handler-level flag wins and throws NotFoundException", async () => {
+          const guard = await createGuard({ CONTROLLER_FLAG: true })
+          const { handler, cls } = applyMetadata(
+            "HANDLER_FLAG",
+            "CONTROLLER_FLAG",
+          )
+          const ctx = executionContext(
+            undefined,
+            undefined,
+            handler,
+            cls,
+          ) as ExecutionContext
+
+          expect(() => guard.canActivate(ctx)).toThrow(NotFoundException)
+        })
+      })
+    })
+
+    describe("Given @Feature on both and neither flag is set", () => {
+      it("Then the handler-level flag wins and throws NotFoundException", async () => {
+        const guard = await createGuard({})
+        const { handler, cls } = applyMetadata(
+          "HANDLER_FLAG",
+          "CONTROLLER_FLAG",
+        )
+        const ctx = executionContext(
+          undefined,
+          undefined,
+          handler,
+          cls,
+        ) as ExecutionContext
+
+        expect(() => guard.canActivate(ctx)).toThrow(NotFoundException)
+      })
+    })
   })
 })
