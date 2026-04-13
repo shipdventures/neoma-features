@@ -1,0 +1,59 @@
+import {
+  type CanActivate,
+  type ExecutionContext,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common"
+
+import { FEATURE_KEY } from "../decorators/feature.decorator"
+import {
+  FEATURES_OPTIONS,
+  type FeaturesModuleOptions,
+} from "../features.options"
+
+/**
+ * Guard that enforces feature flag gating.
+ *
+ * Reads the `@Feature` metadata from the handler or controller using raw
+ * `Reflect.getMetadata` and checks the flags record. Throws
+ * `NotFoundException` when the flag is `false` or absent (fail-closed).
+ * Routes without `@Feature` metadata are allowed through unconditionally.
+ *
+ * Handler-level metadata takes priority over class-level metadata.
+ *
+ * @internal Registered globally via `APP_GUARD` -- not exported.
+ */
+@Injectable()
+export class FeatureGuard implements CanActivate {
+  public constructor(
+    @Inject(FEATURES_OPTIONS)
+    private readonly options: FeaturesModuleOptions,
+  ) {}
+
+  /**
+   * Checks whether the requested route's feature flag is enabled.
+   *
+   * @param context - The current execution context
+   * @returns `true` if the route is allowed
+   * @throws {NotFoundException} If the feature flag is disabled or missing
+   */
+  public canActivate(context: ExecutionContext): boolean {
+    const handler = context.getHandler()
+    const cls = context.getClass()
+
+    const flag: string | undefined =
+      Reflect.getMetadata(FEATURE_KEY, handler) ??
+      Reflect.getMetadata(FEATURE_KEY, cls)
+
+    if (flag === undefined) {
+      return true
+    }
+
+    if (this.options.flags[flag] !== true) {
+      throw new NotFoundException()
+    }
+
+    return true
+  }
+}
