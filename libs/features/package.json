@@ -34,6 +34,8 @@
   "license": "MIT",
   "peerDependencies": {
     "@nestjs/common": "11.x",
-    "@nestjs/core": "11.x"
+    "@nestjs/core": "11.x",
+    "reflect-metadata": ">=0.2",
+    "rxjs": ">=7"
   }
 }
