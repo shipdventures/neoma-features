@@ -20,7 +20,7 @@ import { UserFeaturesService } from "./user-features.service"
           ENABLED_FEATURE: true,
           DISABLED_FEATURE: false,
         },
-        resolve: () => users.featuresFor("test-user"),
+        resolve: () => users.featuresFor(),
       }),
     }),
   ],
