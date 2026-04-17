@@ -1,3 +1,5 @@
+import type { ExecutionContext } from "@nestjs/common"
+
 /**
  * Injection token for the features module options.
  *
@@ -6,9 +8,34 @@
 export const FEATURES_OPTIONS = Symbol("FEATURES_OPTIONS")
 
 /**
+ * Per-request feature resolver. Invoked on every `@Feature`-gated guard
+ * activation and unioned with the static `flags` map under strict `=== true`
+ * semantics. Sync and async resolvers are both supported — the guard awaits
+ * uniformly.
+ *
+ * @param ctx - The current Nest `ExecutionContext`, e.g. use
+ *   `ctx.switchToHttp().getRequest()` to read request-bound state.
+ * @returns A map of feature flag names to their enabled/disabled state for
+ *   this request.
+ */
+export type FeatureResolver = (
+  ctx: ExecutionContext,
+) => Record<string, boolean> | Promise<Record<string, boolean>>
+
+/**
  * Configuration options for the features module.
  *
- * @example
+ * The admit rule for a `@Feature(name)`-gated route is pure OR with strict
+ * equality:
+ *
+ * ```
+ * admit = flags?.[name] === true || (await resolve?.(ctx))?.[name] === true
+ * ```
+ *
+ * A resolver returning `{ name: false }` does NOT override
+ * `flags[name] === true` — static `true` wins.
+ *
+ * @example Static flags only
  * ```typescript
  * FeaturesModule.forRoot({
  *   flags: {
@@ -17,11 +44,35 @@ export const FEATURES_OPTIONS = Symbol("FEATURES_OPTIONS")
  *   },
  * })
  * ```
+ *
+ * @example Static flags combined with a per-request resolver
+ * ```typescript
+ * FeaturesModule.forRoot({
+ *   flags: { CHECKOUT_V2: true },
+ *   resolve: async (ctx) => {
+ *     const req = ctx.switchToHttp().getRequest()
+ *     return req.user?.features ?? {}
+ *   },
+ * })
+ * ```
  */
 export interface FeaturesModuleOptions {
   /**
-   * A record of feature flag names to their enabled/disabled state.
-   * Missing flags are treated as disabled (fail-closed).
+   * Static, bootstrap-time feature flag map. Missing flags are treated as
+   * disabled (fail-closed). Optional: a consumer may configure only `resolve`.
    */
-  flags: Record<string, boolean>
+  flags?: Record<string, boolean>
+
+  /**
+   * Optional per-request resolver. Invoked on every `@Feature`-gated guard
+   * activation. Returns (or resolves to) a `Record<string, boolean>` that is
+   * unioned with `flags` under strict `=== true` semantics:
+   *
+   *   admit = flags?.[name] === true || (await resolve?.(ctx))?.[name] === true
+   *
+   * A resolver returning `{ name: false }` does NOT override
+   * `flags[name] === true`. Errors thrown by the resolver propagate through
+   * the Nest exception pipeline.
+   */
+  resolve?: FeatureResolver
 }

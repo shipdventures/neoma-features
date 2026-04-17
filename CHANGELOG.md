@@ -8,8 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `FeaturesModule` options now accept an optional `resolve(ctx)` function for per-request feature decisions. Admit rule is pure OR with static `flags`: `flags[name] === true || (await resolve(ctx))?.[name] === true`. Sync and async resolvers both supported.
 
 ### Changed
+- `FeaturesModuleOptions.flags` is now optional. All existing `forRoot({ flags: ... })` callers continue to type-check and behave identically.
 
 ### Removed
 

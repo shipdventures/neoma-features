@@ -33,6 +33,17 @@ import { FeatureGuard } from "./guards/feature.guard"
  *   inject: [ConfigService],
  * })
  * ```
+ *
+ * @example Per-request resolver (admit rule is pure OR with `flags`)
+ * ```typescript
+ * FeaturesModule.forRoot({
+ *   flags: { CHECKOUT_V2: true },
+ *   resolve: (ctx) => {
+ *     const req = ctx.switchToHttp().getRequest()
+ *     return req.user?.features ?? {}
+ *   },
+ * })
+ * ```
  */
 @Module({
   providers: [
