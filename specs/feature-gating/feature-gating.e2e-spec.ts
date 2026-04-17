@@ -2,6 +2,8 @@ import { managedAppInstance } from "@neoma/managed-app"
 import { HttpStatus } from "@nestjs/common"
 import request from "supertest"
 
+import { UserFeaturesService } from "../../src/user-features.service"
+
 const { OK, NOT_FOUND, NO_CONTENT } = HttpStatus
 
 const appModules: [string, string][] = [
@@ -78,6 +80,34 @@ appModules.forEach(([name, modulePath]) => {
               .get("/gated-enabled/handler-missing")
               .expect(NOT_FOUND)
           })
+        })
+      })
+    })
+
+    describe("Given a route gated on DYNAMIC_FEATURE (resolver-provided)", () => {
+      describe("And the resolver returns DYNAMIC_FEATURE: true", () => {
+        it("Then it responds with a 200", async () => {
+          const server = app.getHttpServer()
+          await request(server).get("/dynamic").expect(OK)
+        })
+
+        if (name === "forRootAsync") {
+          it("And the injected UserFeaturesService.calls increased by 1", async () => {
+            const users = app.get(UserFeaturesService)
+            const before = users.calls
+            const server = app.getHttpServer()
+            await request(server).get("/dynamic").expect(OK)
+            expect(users.calls).toBe(before + 1)
+          })
+        }
+      })
+    })
+
+    describe("Given a route gated on DYNAMIC_DISABLED (resolver-provided)", () => {
+      describe("And the resolver returns DYNAMIC_DISABLED: false", () => {
+        it("Then it responds with a 404", async () => {
+          const server = app.getHttpServer()
+          await request(server).get("/dynamic-disabled").expect(NOT_FOUND)
         })
       })
     })
