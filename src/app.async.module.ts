@@ -12,7 +12,6 @@ import { UserFeaturesService } from "./user-features.service"
 
 @Module({
   imports: [
-    UserFeaturesModule,
     FeaturesModule.forRootAsync({
       imports: [UserFeaturesModule],
       inject: [UserFeaturesService],

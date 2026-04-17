@@ -38,6 +38,11 @@ export default tseslint.config(
     },
     rules: {
       "@typescript-eslint/no-unsafe-argument": "error",
+      // Allow intentionally unused args/vars when prefixed with an underscore.
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
       // Don't use semi-colons to terminate statements.
       semi: ["error", "never"],
       // Force explicitly stated return types to avoid errors where a function returns 2 different types.
