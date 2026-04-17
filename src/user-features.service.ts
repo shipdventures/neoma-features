@@ -9,6 +9,7 @@ type DynamicFlags = {
 export class UserFeaturesService {
   public calls = 0
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   public featuresFor(_userId: string): DynamicFlags {
     this.calls += 1
     return {

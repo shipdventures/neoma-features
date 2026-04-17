@@ -60,7 +60,7 @@ describe("FeatureGuard", () => {
           cls,
         ) as ExecutionContext
 
-        expect(await guard.canActivate(ctx)).toBe(true)
+        await expect(guard.canActivate(ctx)).resolves.toBe(true)
       })
     })
 
@@ -75,7 +75,7 @@ describe("FeatureGuard", () => {
           cls,
         ) as ExecutionContext
 
-        expect(await guard.canActivate(ctx)).toBe(true)
+        await expect(guard.canActivate(ctx)).resolves.toBe(true)
       })
     })
 
@@ -141,7 +141,7 @@ describe("FeatureGuard", () => {
           cls,
         ) as ExecutionContext
 
-        expect(await guard.canActivate(ctx)).toBe(true)
+        await expect(guard.canActivate(ctx)).resolves.toBe(true)
       })
     })
 
@@ -218,7 +218,7 @@ describe("FeatureGuard", () => {
             cls,
           ) as ExecutionContext
 
-          expect(await guard.canActivate(ctx)).toBe(true)
+          await expect(guard.canActivate(ctx)).resolves.toBe(true)
         })
       })
 
@@ -269,7 +269,7 @@ describe("FeatureGuard", () => {
             cls,
           ) as ExecutionContext
 
-          expect(await guard.canActivate(ctx)).toBe(true)
+          await expect(guard.canActivate(ctx)).resolves.toBe(true)
         })
       })
 
@@ -284,7 +284,7 @@ describe("FeatureGuard", () => {
             cls,
           ) as ExecutionContext
 
-          expect(await guard.canActivate(ctx)).toBe(true)
+          await expect(guard.canActivate(ctx)).resolves.toBe(true)
         })
       })
 
@@ -334,7 +334,7 @@ describe("FeatureGuard", () => {
           cls,
         ) as ExecutionContext
 
-        expect(await guard.canActivate(ctx)).toBe(true)
+        await expect(guard.canActivate(ctx)).resolves.toBe(true)
       })
     })
 
@@ -384,7 +384,7 @@ describe("FeatureGuard", () => {
           cls,
         ) as ExecutionContext
 
-        expect(await guard.canActivate(ctx)).toBe(true)
+        await expect(guard.canActivate(ctx)).resolves.toBe(true)
         expect(resolver).not.toHaveBeenCalled()
       })
     })
