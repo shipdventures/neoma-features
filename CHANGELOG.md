@@ -8,14 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Removed
+
+## [0.2.0] - 2026-04-17
+
+### Added
 - `FeaturesModule` options now accept an optional `resolve(ctx)` function for per-request feature decisions. Admit rule is pure OR with static `flags`: `flags[name] === true || (await resolve(ctx))?.[name] === true`. Sync and async resolvers both supported.
 - `FeaturesModule.forRootAsync` now supports DI-injected services in `useFactory`, enabling per-request resolvers backed by application services (e.g. a user service).
 - Public `FeatureResolver` type exported for consumers annotating factory return shapes.
 
 ### Changed
 - `FeaturesModuleOptions.flags` is now optional. All existing `forRoot({ flags: ... })` callers continue to type-check and behave identically.
-
-### Removed
 
 ## [0.1.0] - 2026-04-13
 
@@ -26,5 +32,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Handler-level `@Feature` overrides controller-level `@Feature` (most specific wins)
 - Fail-closed semantics — a flag key absent from the record is treated as disabled
 
-[Unreleased]: https://github.com/shipdventures/neoma-features/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/shipdventures/neoma-features/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/shipdventures/neoma-features/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/shipdventures/neoma-features/releases/tag/v0.1.0
