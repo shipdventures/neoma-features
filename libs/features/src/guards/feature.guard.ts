@@ -16,11 +16,15 @@ import {
  * Guard that enforces feature flag gating.
  *
  * Reads the `@Feature` metadata from the handler or controller using raw
- * `Reflect.getMetadata` and checks the flags record. Throws
- * `NotFoundException` when the flag is `false` or absent (fail-closed).
- * Routes without `@Feature` metadata are allowed through unconditionally.
+ * `Reflect.getMetadata` and admits the request when either the static `flags`
+ * map or the optional per-request `resolve` function reports the flag as
+ * strictly `true`. Throws `NotFoundException` otherwise (fail-closed). Routes
+ * without `@Feature` metadata are allowed through unconditionally.
  *
- * Handler-level metadata takes priority over class-level metadata.
+ * Handler-level metadata takes priority over class-level metadata. The
+ * resolver is invoked lazily — only when the static path did not already
+ * admit — and its return value is awaited uniformly so sync and async
+ * resolvers share the same code path.
  *
  * @internal Registered globally via `APP_GUARD` -- not exported.
  */
@@ -37,8 +41,9 @@ export class FeatureGuard implements CanActivate {
    * @param context - The current execution context
    * @returns `true` if the route is allowed
    * @throws {NotFoundException} If the feature flag is disabled or missing
+   *   from both the static map and the resolver's returned map
    */
-  public canActivate(context: ExecutionContext): boolean {
+  public async canActivate(context: ExecutionContext): Promise<boolean> {
     const handler = context.getHandler()
     const cls = context.getClass()
 
@@ -50,10 +55,17 @@ export class FeatureGuard implements CanActivate {
       return true
     }
 
-    if (this.options.flags[flag] !== true) {
-      throw new NotFoundException()
+    const { flags, resolve } = this.options
+    const staticAdmits = flags?.[flag] === true
+    if (staticAdmits) {
+      return true
     }
 
-    return true
+    const resolved = await resolve?.(context)
+    if (resolved?.[flag] === true) {
+      return true
+    }
+
+    throw new NotFoundException()
   }
 }

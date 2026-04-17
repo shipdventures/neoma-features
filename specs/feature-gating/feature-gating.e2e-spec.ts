@@ -82,6 +82,24 @@ appModules.forEach(([name, modulePath]) => {
       })
     })
 
+    describe("When GET /dynamic is gated on a dynamic feature the resolver enables", () => {
+      describe("And the resolver returns DYNAMIC_FEATURE: true", () => {
+        it("Then it responds with a 200", async () => {
+          const server = app.getHttpServer()
+          await request(server).get("/dynamic").expect(OK)
+        })
+      })
+    })
+
+    describe("When GET /dynamic-disabled is gated on a dynamic feature the resolver disables", () => {
+      describe("And the resolver returns DYNAMIC_DISABLED: false", () => {
+        it("Then it responds with a 404", async () => {
+          const server = app.getHttpServer()
+          await request(server).get("/dynamic-disabled").expect(NOT_FOUND)
+        })
+      })
+    })
+
     describe("Given a controller with @Feature('MISSING_FEATURE') not set", () => {
       describe("And a handler overrides with @Feature('ALSO_MISSING')", () => {
         describe("And with the flag 'ALSO_MISSING' not set", () => {
