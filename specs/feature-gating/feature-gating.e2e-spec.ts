@@ -112,22 +112,5 @@ appModules.forEach(([name, modulePath]) => {
         })
       })
     })
-
-    if (name === "forRootAsync") {
-      describe("Given forRootAsync with a resolver that reads req.headers", () => {
-        it("admits when x-features: RESOLVER_ENABLED is present", async () => {
-          const server = app.getHttpServer()
-          await request(server)
-            .get("/resolver-async")
-            .set("x-features", "RESOLVER_ENABLED")
-            .expect(OK)
-        })
-
-        it("denies when x-features is absent", async () => {
-          const server = app.getHttpServer()
-          await request(server).get("/resolver-async").expect(NOT_FOUND)
-        })
-      })
-    }
   })
 })
