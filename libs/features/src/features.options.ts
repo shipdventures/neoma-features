@@ -1,4 +1,4 @@
-import type { ExecutionContext } from "@nestjs/common"
+import type { Request } from "express"
 
 /**
  * Injection token for the features module options.
@@ -13,13 +13,13 @@ export const FEATURES_OPTIONS = Symbol("FEATURES_OPTIONS")
  * semantics. Sync and async resolvers are both supported — the guard awaits
  * uniformly.
  *
- * @param ctx - The current Nest `ExecutionContext`, e.g. use
- *   `ctx.switchToHttp().getRequest()` to read request-bound state.
+ * @param req - The current express `Request`; read request-bound state
+ *   (headers, `req.user`, etc.) directly.
  * @returns A map of feature flag names to their enabled/disabled state for
  *   this request.
  */
 export type FeatureResolver = (
-  ctx: ExecutionContext,
+  req: Request,
 ) => Record<string, boolean> | Promise<Record<string, boolean>>
 
 /**
@@ -29,7 +29,7 @@ export type FeatureResolver = (
  * equality:
  *
  * ```
- * admit = flags?.[name] === true || (await resolve?.(ctx))?.[name] === true
+ * admit = flags?.[name] === true || (await resolve?.(req))?.[name] === true
  * ```
  *
  * A resolver returning `{ name: false }` does NOT override
@@ -49,10 +49,7 @@ export type FeatureResolver = (
  * ```typescript
  * FeaturesModule.forRoot({
  *   flags: { CHECKOUT_V2: true },
- *   resolve: async (ctx) => {
- *     const req = ctx.switchToHttp().getRequest()
- *     return req.user?.features ?? {}
- *   },
+ *   resolve: async (req) => req.user?.features ?? {},
  * })
  * ```
  */
@@ -68,7 +65,7 @@ export interface FeaturesModuleOptions {
    * activation. Returns (or resolves to) a `Record<string, boolean>` that is
    * unioned with `flags` under strict `=== true` semantics:
    *
-   *   admit = flags?.[name] === true || (await resolve?.(ctx))?.[name] === true
+   *   admit = flags?.[name] === true || (await resolve?.(req))?.[name] === true
    *
    * A resolver returning `{ name: false }` does NOT override
    * `flags[name] === true`. Errors thrown by the resolver propagate through

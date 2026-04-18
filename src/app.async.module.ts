@@ -6,6 +6,7 @@ import { AppController } from "./app.controller"
 import { GatedDynamicController } from "./gated-dynamic.controller"
 import { GatedEnabledController } from "./gated-enabled.controller"
 import { GatedMissingController } from "./gated-missing.controller"
+import { GatedResolverAsyncController } from "./gated-resolver-async.controller"
 import { GatedController } from "./gated.controller"
 import { UserFeaturesModule } from "./user-features.module"
 import { UserFeaturesService } from "./user-features.service"
@@ -20,7 +21,12 @@ import { UserFeaturesService } from "./user-features.service"
           ENABLED_FEATURE: true,
           DISABLED_FEATURE: false,
         },
-        resolve: () => users.featuresFor(),
+        resolve: (req): Record<string, boolean> => {
+          const header = req.headers?.["x-features"]
+          return users.featuresFor(
+            typeof header === "string" ? header : undefined,
+          )
+        },
       }),
     }),
   ],
@@ -30,6 +36,7 @@ import { UserFeaturesService } from "./user-features.service"
     GatedDynamicController,
     GatedEnabledController,
     GatedMissingController,
+    GatedResolverAsyncController,
   ],
 })
 export class AsyncAppModule {}

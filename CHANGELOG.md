@@ -10,8 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 ### Changed
+- **BREAKING:** `FeatureResolver` now receives the express `Request` directly instead of a NestJS `ExecutionContext`. Migration: `(ctx) => { const req = ctx.switchToHttp().getRequest(); ... }` becomes `(req) => { ... }`.
+- `express` is now a non-optional peer dependency (mirroring `@neoma/logging`). Fastify-only apps cannot install `@neoma/features` at this signature.
 
 ### Removed
+- Resolver access to WebSocket / RPC execution contexts. The resolver contract is HTTP-only by design; non-HTTP transports are foreclosed at this signature.
 
 ## [0.2.0] - 2026-04-17
 

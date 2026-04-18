@@ -1,4 +1,5 @@
-import { type ExecutionContext, Module } from "@nestjs/common"
+import { Module } from "@nestjs/common"
+import type { Request } from "express"
 
 import { FeaturesModule } from "@lib"
 
@@ -12,8 +13,7 @@ import { ResolverController } from "./resolver.controller"
         ENABLED_FEATURE: true,
         DISABLED_FEATURE: false,
       },
-      resolve: (ctx: ExecutionContext) => {
-        const req = ctx.switchToHttp().getRequest()
+      resolve: (req: Request) => {
         const header = req.headers?.["x-features"]
         const resolved: Record<string, boolean> = {
           // Intentionally report ENABLED_FEATURE as false to exercise the
