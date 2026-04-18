@@ -190,6 +190,38 @@ flags[name] === true || (await resolve(req))[name] === true
 
 **When to use which.** Reach for static `flags` when a feature is on or off for everyone (env-driven rollout, kill switch). Reach for `resolve` when availability depends on the request itself (user entitlements, tenant plans, A/B cohort).
 
+### 5. Customising the Deny Response
+
+By default, a denied request returns `HTTP 404` via `NotFoundException`. For some routes a 404 is the wrong signal — you may want `403 Forbidden`, `409 Conflict`, or a custom payload that tells the caller *why* the route is unavailable. Supply an `onDeny` factory on the decorator to control what is thrown on the deny path:
+
+```typescript
+import { Controller, ForbiddenException, Post } from "@nestjs/common"
+import { Feature } from "@neoma/features"
+
+@Controller("checkout")
+export class CheckoutController {
+  @Post()
+  @Feature("CHECKOUT_V2", {
+    onDeny: (req) =>
+      new ForbiddenException({
+        message: "Checkout disabled",
+        requestId: req.headers["x-request-id"],
+      }),
+  })
+  async checkout() {
+    // Handle the request
+  }
+}
+```
+
+The factory receives the live express `Request` — the same one the resolver would see — so you can read headers, `req.user`, or anything else bound to the current request.
+
+**Admit path is untouched.** `onDeny` is only invoked when the guard denies. A request admitted by either the static `flags` or the `resolve` function never calls `onDeny`.
+
+**Handler-level `@Feature` fully overrides class-level.** When a handler re-declares `@Feature` without options, the class-level `onDeny` is discarded — the handler falls back to the default `NotFoundException`. There is no field-level inheritance; each `@Feature` stands on its own.
+
+**Whatever you return is thrown.** The guard throws the value returned by `onDeny` as-is. Typically that's an `HttpException` subclass (`ForbiddenException`, `UnauthorizedException`, etc.) so Nest's default exception filter formats the response — but you can return any value as long as your exception pipeline can handle it. It's the consumer's responsibility.
+
 ## How It Works
 
 - A global `APP_GUARD` reads `@Feature` metadata from the handler and controller.
@@ -249,7 +281,7 @@ const resolve: FeatureResolver = async (req) => {
 }
 ```
 
-### `@Feature(flag: string)`
+### `@Feature(flag: string, options?: FeatureOptions)`
 
 Decorator that marks a controller or route handler as gated behind a feature flag. Can be applied to both classes and methods.
 
@@ -263,7 +295,34 @@ myRoute() {}
 @Feature("MY_FLAG")
 @Controller("my")
 class MyController {}
+
+// With a custom deny response
+@Feature("MY_FLAG", {
+  onDeny: (req) => new ForbiddenException("disabled"),
+})
+@Get()
+myRoute() {}
 ```
+
+### `FeatureOptions`
+
+```typescript
+interface FeatureOptions {
+  /**
+   * Factory invoked on the deny path to construct the value to throw. When
+   * omitted, the guard throws `NotFoundException`.
+   */
+  onDeny?: FeatureOnDeny
+}
+```
+
+### `FeatureOnDeny`
+
+```typescript
+type FeatureOnDeny = (req: Request) => unknown
+```
+
+Invoked only on deny. Receives the live express `Request`. Whatever it returns is thrown by the guard as-is — typically an `HttpException` subclass (e.g. `ForbiddenException`) so Nest's default exception filter formats the response. Any other value works too provided your exception pipeline handles it; that's the consumer's responsibility.
 
 ## License
 

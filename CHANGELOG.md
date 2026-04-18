@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `@Feature` now accepts an optional second argument `{ onDeny?: (req) => unknown }`. When the guard denies, the value returned by `onDeny` is thrown in place of the default `NotFoundException` — useful when a 404 is the wrong signal (e.g. a 403 kill-switch for webhook receivers). The factory receives the live express `Request` so consumers can read headers, `req.user`, etc. Whatever is returned is thrown as-is; it is the consumer's responsibility to ensure their exception pipeline handles it (typically by returning an `HttpException` subclass). Exports new `FeatureOptions` and `FeatureOnDeny` types.
 - README documentation for the `resolve` option and `FeatureResolver` type — catches the public docs up to the v0.2 resolver API and the v0.3 `Request`-narrowed signature. Both root and package READMEs now cover union semantics, static-wins, per-request resolver examples (including DI-injected services), and the express peer-dep requirement.
 
 ### Changed

@@ -73,3 +73,43 @@ export interface FeaturesModuleOptions {
    */
   resolve?: FeatureResolver
 }
+
+/**
+ * Factory invoked by the feature guard on the deny path for a route whose
+ * `@Feature` decorator supplied an `onDeny` option. Whatever is returned
+ * is thrown by the guard — typically an `HttpException` subclass so Nest's
+ * default exception filter formats the response, but consumers are free to
+ * return any value and pair it with their own exception filter.
+ *
+ * Invoked only on deny. Never invoked when the flag admits, and never
+ * invoked for routes without `@Feature` metadata.
+ *
+ * @param req - The current express `Request`. Read headers, `req.user`, etc.
+ *   directly — the signature mirrors {@link FeatureResolver} for consistency.
+ * @returns The value to throw. The guard throws it as-is; it's the
+ *   consumer's responsibility to ensure the value is handled by their
+ *   exception pipeline.
+ */
+export type FeatureOnDeny = (req: Request) => unknown
+
+/**
+ * Options accepted by the `@Feature` decorator.
+ *
+ * @example Override the default `NotFoundException` on deny
+ * ```typescript
+ * @Feature("CHECKOUT_V2", {
+ *   onDeny: (req) =>
+ *     new ForbiddenException({
+ *       message: "Checkout disabled",
+ *       requestId: req.headers["x-request-id"],
+ *     }),
+ * })
+ * ```
+ */
+export interface FeatureOptions {
+  /**
+   * Factory invoked on the deny path to construct the value to throw. When
+   * omitted, the guard throws `NotFoundException` (v0.1 / v0.2 behaviour).
+   */
+  onDeny?: FeatureOnDeny
+}
