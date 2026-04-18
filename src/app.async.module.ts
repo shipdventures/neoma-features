@@ -7,6 +7,10 @@ import { GatedDynamicController } from "./gated-dynamic.controller"
 import { GatedEnabledController } from "./gated-enabled.controller"
 import { GatedMissingController } from "./gated-missing.controller"
 import { GatedController } from "./gated.controller"
+import {
+  OnDenyClassOverrideController,
+  OnDenyController,
+} from "./on-deny.controller"
 import { UserFeaturesModule } from "./user-features.module"
 import { UserFeaturesService } from "./user-features.service"
 
@@ -30,6 +34,8 @@ import { UserFeaturesService } from "./user-features.service"
     GatedDynamicController,
     GatedEnabledController,
     GatedMissingController,
+    OnDenyController,
+    OnDenyClassOverrideController,
   ],
 })
 export class AsyncAppModule {}

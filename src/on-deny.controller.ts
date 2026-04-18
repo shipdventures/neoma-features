@@ -1,0 +1,65 @@
+import {
+  Controller,
+  ForbiddenException,
+  Get,
+  HttpCode,
+  HttpStatus,
+} from "@nestjs/common"
+
+import { Feature } from "@lib"
+
+@Controller()
+export class OnDenyController {
+  @Get("on-deny/disabled")
+  @Feature("DISABLED_FEATURE", {
+    onDeny: () =>
+      new ForbiddenException({
+        message: "Webhook receiver disabled",
+      }),
+  })
+  public disabled(): string {
+    return "unreachable"
+  }
+
+  @Get("on-deny/disabled-with-header")
+  @Feature("DISABLED_FEATURE", {
+    onDeny: (req) =>
+      new ForbiddenException({
+        message: "Webhook receiver disabled",
+        requestId: req.headers["x-svix-id"],
+      }),
+  })
+  public disabledWithHeader(): string {
+    return "unreachable"
+  }
+
+  @Get("on-deny/enabled")
+  @Feature("ENABLED_FEATURE", {
+    onDeny: () => new ForbiddenException("should never be thrown"),
+  })
+  public enabled(): string {
+    return "admitted"
+  }
+
+  @Get("on-deny/ungated")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  public ungated(): void {
+    // No @Feature — always reachable, confirms ungated routes don't hit onDeny
+  }
+}
+
+@Controller("on-deny-class")
+@Feature("DISABLED_FEATURE", {
+  onDeny: () =>
+    new ForbiddenException({ message: "Class-level onDeny should override" }),
+})
+export class OnDenyClassOverrideController {
+  // Handler-level @Feature re-declares the flag with no options.
+  // Expected: handler-level fully overrides class-level — class onDeny is
+  // discarded, deny path falls back to NotFoundException (404).
+  @Get("handler-plain")
+  @Feature("DISABLED_FEATURE")
+  public handlerPlain(): string {
+    return "unreachable"
+  }
+}

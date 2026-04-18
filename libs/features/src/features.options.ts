@@ -73,3 +73,43 @@ export interface FeaturesModuleOptions {
    */
   resolve?: FeatureResolver
 }
+
+/**
+ * Factory invoked by the feature guard on the deny path for a route whose
+ * `@Feature` decorator supplied an `onDeny` option. The returned value is
+ * thrown — it is the caller's responsibility to install an exception filter
+ * that handles non-`HttpException` values if they return plain `Error`s or
+ * arbitrary objects.
+ *
+ * Invoked only on deny. Never invoked when the flag admits, and never
+ * invoked for routes without `@Feature` metadata.
+ *
+ * @param req - The current express `Request`. Read headers, `req.user`, etc.
+ *   directly — the signature mirrors {@link FeatureResolver} for consistency.
+ * @returns The value to throw. Typically an `HttpException` subclass
+ *   (e.g. `ForbiddenException`) so Nest's default exception filter formats
+ *   the response.
+ */
+export type FeatureOnDeny = (req: Request) => unknown
+
+/**
+ * Options accepted by the `@Feature` decorator.
+ *
+ * @example Override the default `NotFoundException` on deny
+ * ```typescript
+ * @Feature("RESEND_WEBHOOK", {
+ *   onDeny: (req) =>
+ *     new ForbiddenException({
+ *       message: "Webhook receiver disabled",
+ *       requestId: req.headers["svix-id"],
+ *     }),
+ * })
+ * ```
+ */
+export interface FeatureOptions {
+  /**
+   * Factory invoked on the deny path to construct the value to throw. When
+   * omitted, the guard throws `NotFoundException` (v0.1 / v0.2 behaviour).
+   */
+  onDeny?: FeatureOnDeny
+}

@@ -7,7 +7,10 @@ import {
 } from "@nestjs/common"
 import type { Request } from "express"
 
-import { FEATURE_KEY } from "../decorators/feature.decorator"
+import {
+  FEATURE_KEY,
+  type FeatureMetadata,
+} from "../decorators/feature.decorator"
 import {
   FEATURES_OPTIONS,
   type FeaturesModuleOptions,
@@ -19,8 +22,10 @@ import {
  * Reads the `@Feature` metadata from the handler or controller using raw
  * `Reflect.getMetadata` and admits the request when either the static `flags`
  * map or the optional per-request `resolve` function reports the flag as
- * strictly `true`. Throws `NotFoundException` otherwise (fail-closed). Routes
- * without `@Feature` metadata are allowed through unconditionally.
+ * strictly `true`. Throws `NotFoundException` by default, or the value
+ * returned by the decorator's `onDeny` factory when one is supplied
+ * (fail-closed). Routes without `@Feature` metadata are allowed through
+ * unconditionally.
  *
  * Handler-level metadata takes priority over class-level metadata. The
  * resolver is invoked lazily — only when the static path did not already
@@ -41,21 +46,24 @@ export class FeatureGuard implements CanActivate {
    *
    * @param context - The current execution context
    * @returns `true` if the route is allowed
-   * @throws {NotFoundException} If the feature flag is disabled or missing
-   *   from both the static map and the resolver's returned map
+   * @throws Throws `NotFoundException` by default when the feature flag is
+   *   disabled or missing from both the static map and the resolver's
+   *   returned map. When the decorator supplied an `onDeny` factory, the
+   *   value it returns is thrown instead.
    */
   public async canActivate(context: ExecutionContext): Promise<boolean> {
     const handler = context.getHandler()
     const cls = context.getClass()
 
-    const flag: string | undefined =
+    const metadata: FeatureMetadata | undefined =
       Reflect.getMetadata(FEATURE_KEY, handler) ??
       Reflect.getMetadata(FEATURE_KEY, cls)
 
-    if (flag === undefined) {
+    if (metadata === undefined) {
       return true
     }
 
+    const { flag, onDeny } = metadata
     const { flags, resolve } = this.options
     const staticAdmits = flags?.[flag] === true
     if (staticAdmits) {
@@ -68,6 +76,6 @@ export class FeatureGuard implements CanActivate {
       return true
     }
 
-    throw new NotFoundException()
+    throw onDeny ? onDeny(req) : new NotFoundException()
   }
 }

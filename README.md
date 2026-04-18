@@ -190,6 +190,38 @@ flags[name] === true || (await resolve(req))[name] === true
 
 **When to use which.** Reach for static `flags` when a feature is on or off for everyone (env-driven rollout, kill switch). Reach for `resolve` when availability depends on the request itself (user entitlements, tenant plans, A/B cohort).
 
+### 5. Customising the Deny Response
+
+By default, a denied request returns `HTTP 404` via `NotFoundException`. For some routes — webhook receivers in particular — a 404 is the wrong signal, because most providers (Resend, Svix, Stripe) retry indefinitely on 404. Supply an `onDeny` factory on the decorator to control what is thrown on the deny path:
+
+```typescript
+import { Controller, ForbiddenException, Post, Req } from "@nestjs/common"
+import { Feature } from "@neoma/features"
+
+@Controller("webhooks")
+export class WebhooksController {
+  @Post("resend")
+  @Feature("RESEND_WEBHOOK", {
+    onDeny: (req) =>
+      new ForbiddenException({
+        message: "Webhook receiver disabled",
+        requestId: req.headers["svix-id"],
+      }),
+  })
+  async resend() {
+    // Handle the webhook
+  }
+}
+```
+
+The factory receives the live express `Request` — the same one the resolver would see — so you can read headers, `req.user`, or anything else bound to the current request.
+
+**Admit path is untouched.** `onDeny` is only invoked when the guard denies. A request admitted by either the static `flags` or the `resolve` function never calls `onDeny`.
+
+**Handler-level `@Feature` fully overrides class-level.** When a handler re-declares `@Feature` without options, the class-level `onDeny` is discarded — the handler falls back to the default `NotFoundException`. There is no field-level inheritance; each `@Feature` stands on its own.
+
+**Return type is `unknown`.** You may return any value — `HttpException` subclasses are formatted by Nest's default exception filter. If you return a plain `Error` or an arbitrary object, it is your responsibility to install an `ExceptionFilter` that handles it.
+
 ## How It Works
 
 - A global `APP_GUARD` reads `@Feature` metadata from the handler and controller.
@@ -249,7 +281,7 @@ const resolve: FeatureResolver = async (req) => {
 }
 ```
 
-### `@Feature(flag: string)`
+### `@Feature(flag: string, options?: FeatureOptions)`
 
 Decorator that marks a controller or route handler as gated behind a feature flag. Can be applied to both classes and methods.
 
@@ -263,7 +295,34 @@ myRoute() {}
 @Feature("MY_FLAG")
 @Controller("my")
 class MyController {}
+
+// With a custom deny response
+@Feature("MY_FLAG", {
+  onDeny: (req) => new ForbiddenException("disabled"),
+})
+@Get()
+myWebhook() {}
 ```
+
+### `FeatureOptions`
+
+```typescript
+interface FeatureOptions {
+  /**
+   * Factory invoked on the deny path to construct the value to throw. When
+   * omitted, the guard throws `NotFoundException`.
+   */
+  onDeny?: FeatureOnDeny
+}
+```
+
+### `FeatureOnDeny`
+
+```typescript
+type FeatureOnDeny = (req: Request) => unknown
+```
+
+Invoked only on deny. Receives the live express `Request`. Returns the value to throw — typically an `HttpException` subclass. Plain `Error`s or arbitrary objects require a custom `ExceptionFilter` to format the response.
 
 ## License
 
