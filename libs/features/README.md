@@ -220,7 +220,7 @@ The factory receives the live express `Request` — the same one the resolver wo
 
 **Handler-level `@Feature` fully overrides class-level.** When a handler re-declares `@Feature` without options, the class-level `onDeny` is discarded — the handler falls back to the default `NotFoundException`. There is no field-level inheritance; each `@Feature` stands on its own.
 
-**Return type is `unknown`.** You may return any value — `HttpException` subclasses are formatted by Nest's default exception filter. If you return a plain `Error` or an arbitrary object, it is your responsibility to install an `ExceptionFilter` that handles it.
+**Return type is `Error`.** The factory must return an `Error` instance — typically an `HttpException` subclass (`ForbiddenException`, `UnauthorizedException`, etc.), formatted automatically by Nest's default exception filter. A plain `new Error(...)` works too, but requires your own `ExceptionFilter` to format the response. Returning a non-`Error` value (`null`, `undefined`, a string, a plain object) is a programmer mistake: the guard throws a descriptive `Error` naming the contract rather than passing the bogus value into Nest's exception pipeline.
 
 ## How It Works
 
@@ -319,10 +319,10 @@ interface FeatureOptions {
 ### `FeatureOnDeny`
 
 ```typescript
-type FeatureOnDeny = (req: Request) => unknown
+type FeatureOnDeny = (req: Request) => Error
 ```
 
-Invoked only on deny. Receives the live express `Request`. Returns the value to throw — typically an `HttpException` subclass. Plain `Error`s or arbitrary objects require a custom `ExceptionFilter` to format the response.
+Invoked only on deny. Receives the live express `Request`. Returns the `Error` to throw — typically an `HttpException` subclass. Plain `Error`s require a custom `ExceptionFilter` to format the response. Returning a non-`Error` value is a programmer mistake and will cause the guard to throw a descriptive `Error` naming the contract.
 
 ## License
 

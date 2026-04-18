@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Get,
   HttpCode,
+  HttpException,
   HttpStatus,
 } from "@nestjs/common"
 
@@ -39,6 +40,18 @@ export class OnDenyController {
   })
   public enabled(): string {
     return "admitted"
+  }
+
+  @Get("on-deny/fail-closed")
+  @Feature("MISSING_FEATURE", {
+    onDeny: () =>
+      new HttpException(
+        { message: "I'm a teapot — feature absent" },
+        HttpStatus.I_AM_A_TEAPOT,
+      ),
+  })
+  public failClosed(): string {
+    return "unreachable"
   }
 
   @Get("on-deny/ungated")

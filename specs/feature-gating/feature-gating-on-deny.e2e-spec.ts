@@ -2,7 +2,7 @@ import { managedAppInstance } from "@neoma/managed-app"
 import { HttpStatus } from "@nestjs/common"
 import request from "supertest"
 
-const { OK, NOT_FOUND, NO_CONTENT, FORBIDDEN } = HttpStatus
+const { OK, NOT_FOUND, NO_CONTENT, FORBIDDEN, I_AM_A_TEAPOT } = HttpStatus
 
 const appModules: [string, string][] = [
   ["forRoot", "src/app.module.ts#AppModule"],
@@ -36,6 +36,16 @@ appModules.forEach(([name, modulePath]) => {
           .set("x-svix-id", svixId)
           .expect(FORBIDDEN)
         expect(res.body.requestId).toBe(svixId)
+      })
+    })
+
+    describe("Given a fail-closed @Feature (flag absent from flags map and resolver output) with an onDeny factory", () => {
+      it("Then the consumer's custom error surfaces with the distinctive 418 status", async () => {
+        const server = app.getHttpServer()
+        const res = await request(server)
+          .get("/on-deny/fail-closed")
+          .expect(I_AM_A_TEAPOT)
+        expect(res.body.message).toBe("I'm a teapot — feature absent")
       })
     })
 

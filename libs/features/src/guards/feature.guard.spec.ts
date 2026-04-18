@@ -219,7 +219,7 @@ describe("FeatureGuard", () => {
     describe("Given only a resolver (no static flags)", () => {
       describe("And the resolver returns { X: true } for the gated flag X", () => {
         it("Then it should return true", async () => {
-          const guard = await createGuard(undefined, () => ({ X: true }))
+          const guard = await createGuard(undefined, async () => ({ X: true }))
           const { handler, cls } = applyMetadata({ flag: "X" })
           const ctx = executionContext(
             undefined,
@@ -234,7 +234,7 @@ describe("FeatureGuard", () => {
 
       describe("And the resolver returns { X: false }", () => {
         it("Then it should throw NotFoundException", async () => {
-          const guard = await createGuard(undefined, () => ({ X: false }))
+          const guard = await createGuard(undefined, async () => ({ X: false }))
           const { handler, cls } = applyMetadata({ flag: "X" })
           const ctx = executionContext(
             undefined,
@@ -251,7 +251,7 @@ describe("FeatureGuard", () => {
 
       describe("And the resolver returns an empty object", () => {
         it("Then it should throw NotFoundException (flag absent)", async () => {
-          const guard = await createGuard(undefined, () => ({}))
+          const guard = await createGuard(undefined, async () => ({}))
           const { handler, cls } = applyMetadata({ flag: "X" })
           const ctx = executionContext(
             undefined,
@@ -270,7 +270,9 @@ describe("FeatureGuard", () => {
     describe("Given both flags and a resolver", () => {
       describe("And flags: { X: true } with resolver returning { X: false }", () => {
         it("Then static true wins and it returns true (resolver does not veto)", async () => {
-          const guard = await createGuard({ X: true }, () => ({ X: false }))
+          const guard = await createGuard({ X: true }, async () => ({
+            X: false,
+          }))
           const { handler, cls } = applyMetadata({ flag: "X" })
           const ctx = executionContext(
             undefined,
@@ -285,7 +287,9 @@ describe("FeatureGuard", () => {
 
       describe("And flags: { X: false } with resolver returning { X: true }", () => {
         it("Then the union admits and it returns true", async () => {
-          const guard = await createGuard({ X: false }, () => ({ X: true }))
+          const guard = await createGuard({ X: false }, async () => ({
+            X: true,
+          }))
           const { handler, cls } = applyMetadata({ flag: "X" })
           const ctx = executionContext(
             undefined,
@@ -300,7 +304,7 @@ describe("FeatureGuard", () => {
 
       describe("And the gated flag appears in neither the flags nor the resolver's map", () => {
         it("Then it should throw NotFoundException", async () => {
-          const guard = await createGuard({ OTHER: true }, () => ({
+          const guard = await createGuard({ OTHER: true }, async () => ({
             ANOTHER: true,
           }))
           const { handler, cls } = applyMetadata({ flag: "X" })
@@ -348,10 +352,10 @@ describe("FeatureGuard", () => {
       })
     })
 
-    describe("Given a resolver that throws synchronously", () => {
-      it("Then the error propagates unchanged (no NotFoundException substitution)", async () => {
-        const boom = new Error("resolver exploded")
-        const guard = await createGuard(undefined, () => {
+    describe("Given a resolver that returns a rejected Promise", () => {
+      it("Then the rejection propagates unchanged (no NotFoundException substitution)", async () => {
+        const boom = new Error("resolver rejected")
+        const guard = await createGuard(undefined, async () => {
           throw boom
         })
         const { handler, cls } = applyMetadata({ flag: "X" })
@@ -366,11 +370,14 @@ describe("FeatureGuard", () => {
       })
     })
 
-    describe("Given a resolver that returns a rejected Promise", () => {
-      it("Then the rejection propagates unchanged", async () => {
-        const boom = new Error("resolver rejected")
-        const guard = await createGuard(undefined, () => Promise.reject(boom))
-        const { handler, cls } = applyMetadata({ flag: "X" })
+    describe("Given a resolver that rejects AND @Feature has an onDeny factory", () => {
+      it("Then the resolver's rejection propagates unchanged (onDeny invocation semantics are unspecified for programmer-error paths)", async () => {
+        const boom = new Error("resolver rejected with onDeny configured")
+        const onDeny = jest.fn().mockReturnValue(new ForbiddenException())
+        const guard = await createGuard(undefined, async () => {
+          throw boom
+        })
+        const { handler, cls } = applyMetadata({ flag: "X", onDeny })
         const ctx = executionContext(
           undefined,
           undefined,
@@ -439,7 +446,7 @@ describe("FeatureGuard", () => {
     describe("Given @Feature('X', { onDeny }) and a resolver that admits", () => {
       it("Then it resolves true and onDeny is not invoked", async () => {
         const onDeny = jest.fn()
-        const guard = await createGuard(undefined, () => ({ X: true }))
+        const guard = await createGuard(undefined, async () => ({ X: true }))
         const { handler, cls } = applyMetadata({ flag: "X", onDeny })
         const ctx = executionContext(
           undefined,
@@ -534,7 +541,7 @@ describe("FeatureGuard", () => {
       it("Then the same Request is passed to both resolver and onDeny", async () => {
         let resolverReq: unknown
         let onDenyReq: unknown
-        const resolve: FeatureResolver = (req) => {
+        const resolve: FeatureResolver = async (req) => {
           resolverReq = req
           return { X: false }
         }
@@ -617,6 +624,161 @@ describe("FeatureGuard", () => {
 
         await expect(guard.canActivate(ctx)).rejects.toBe(forbidden)
         expect(classOnDeny).toHaveBeenCalledTimes(1)
+      })
+    })
+
+    describe("Given onDeny returns a non-Error value", () => {
+      const nonErrorCases: Array<[string, unknown]> = [
+        ["null", null],
+        ["undefined", undefined],
+        ["a string", "just a message"],
+        ["a plain object", {}],
+        ["a number", 42],
+      ]
+
+      nonErrorCases.forEach(([label, value]) => {
+        describe(`And onDeny returns ${label}`, () => {
+          it("Then the guard throws a descriptive Error naming the contract", async () => {
+            const onDeny = jest.fn().mockReturnValue(value)
+            const guard = await createGuard({ X: false })
+            const { handler, cls } = applyMetadata({
+              flag: "X",
+              // Cast — we're intentionally violating the typed contract to
+              // verify the runtime guard.
+              onDeny: onDeny as unknown as FeatureMetadata["onDeny"],
+            })
+            const ctx = executionContext(
+              undefined,
+              undefined,
+              handler,
+              cls,
+            ) as ExecutionContext
+
+            await expect(guard.canActivate(ctx)).rejects.toThrow(
+              /@Feature onDeny must return an Error instance/,
+            )
+          })
+        })
+      })
+    })
+
+    describe("Given onDeny returns an Error subclass", () => {
+      const errorCases: Array<[string, () => Error]> = [
+        ["NotFoundException", (): Error => new NotFoundException()],
+        ["ForbiddenException", (): Error => new ForbiddenException()],
+        ["plain Error", (): Error => new Error("plain")],
+      ]
+
+      errorCases.forEach(([label, factory]) => {
+        describe(`And onDeny returns a ${label}`, () => {
+          it("Then the returned Error is thrown unchanged", async () => {
+            const err = factory()
+            const onDeny = jest.fn().mockReturnValue(err)
+            const guard = await createGuard({ X: false })
+            const { handler, cls } = applyMetadata({ flag: "X", onDeny })
+            const ctx = executionContext(
+              undefined,
+              undefined,
+              handler,
+              cls,
+            ) as ExecutionContext
+
+            await expect(guard.canActivate(ctx)).rejects.toBe(err)
+          })
+        })
+      })
+    })
+
+    describe("Given flags contain non-strict-true values for the gated flag", () => {
+      const nonStrictCases: Array<[string, unknown]> = [
+        ['string "true"', "true"],
+        ["number 1", 1],
+        ["empty object {}", {}],
+      ]
+
+      nonStrictCases.forEach(([label, value]) => {
+        describe(`And flags: { X: ${label} }`, () => {
+          it("Then the guard denies (strict === true only) and throws NotFoundException", async () => {
+            const guard = await createGuard({
+              X: value as unknown as boolean,
+            })
+            const { handler, cls } = applyMetadata({ flag: "X" })
+            const ctx = executionContext(
+              undefined,
+              undefined,
+              handler,
+              cls,
+            ) as ExecutionContext
+
+            await expect(guard.canActivate(ctx)).rejects.toThrow(
+              NotFoundException,
+            )
+          })
+
+          it("Then with onDeny configured, the deny routes through onDeny", async () => {
+            const forbidden = new ForbiddenException()
+            const onDeny = jest.fn().mockReturnValue(forbidden)
+            const guard = await createGuard({
+              X: value as unknown as boolean,
+            })
+            const { handler, cls } = applyMetadata({ flag: "X", onDeny })
+            const ctx = executionContext(
+              undefined,
+              undefined,
+              handler,
+              cls,
+            ) as ExecutionContext
+
+            await expect(guard.canActivate(ctx)).rejects.toBe(forbidden)
+            expect(onDeny).toHaveBeenCalledTimes(1)
+          })
+        })
+      })
+    })
+
+    describe("Given the resolver returns non-strict-true values for the gated flag", () => {
+      const nonStrictCases: Array<[string, unknown]> = [
+        ['string "true"', "true"],
+        ["number 1", 1],
+      ]
+
+      nonStrictCases.forEach(([label, value]) => {
+        describe(`And the resolver returns { X: ${label} }`, () => {
+          it("Then the guard denies (strict === true only) and throws NotFoundException", async () => {
+            const guard = await createGuard(undefined, async () => ({
+              X: value as unknown as boolean,
+            }))
+            const { handler, cls } = applyMetadata({ flag: "X" })
+            const ctx = executionContext(
+              undefined,
+              undefined,
+              handler,
+              cls,
+            ) as ExecutionContext
+
+            await expect(guard.canActivate(ctx)).rejects.toThrow(
+              NotFoundException,
+            )
+          })
+
+          it("Then with onDeny configured, the deny routes through onDeny", async () => {
+            const forbidden = new ForbiddenException()
+            const onDeny = jest.fn().mockReturnValue(forbidden)
+            const guard = await createGuard(undefined, async () => ({
+              X: value as unknown as boolean,
+            }))
+            const { handler, cls } = applyMetadata({ flag: "X", onDeny })
+            const ctx = executionContext(
+              undefined,
+              undefined,
+              handler,
+              cls,
+            ) as ExecutionContext
+
+            await expect(guard.canActivate(ctx)).rejects.toBe(forbidden)
+            expect(onDeny).toHaveBeenCalledTimes(1)
+          })
+        })
       })
     })
   })

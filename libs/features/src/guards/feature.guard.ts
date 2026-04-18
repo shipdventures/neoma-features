@@ -49,7 +49,9 @@ export class FeatureGuard implements CanActivate {
    * @throws Throws `NotFoundException` by default when the feature flag is
    *   disabled or missing from both the static map and the resolver's
    *   returned map. When the decorator supplied an `onDeny` factory, the
-   *   value it returns is thrown instead.
+   *   `Error` it returns is thrown instead. If `onDeny` returns a non-`Error`
+   *   value, a descriptive `Error` is thrown to surface the contract
+   *   violation.
    */
   public async canActivate(context: ExecutionContext): Promise<boolean> {
     const handler = context.getHandler()
@@ -76,6 +78,19 @@ export class FeatureGuard implements CanActivate {
       return true
     }
 
-    throw onDeny ? onDeny(req) : new NotFoundException()
+    if (onDeny) {
+      const thrown: unknown = onDeny(req)
+      if (!(thrown instanceof Error)) {
+        const description =
+          thrown !== null && typeof thrown === "object"
+            ? JSON.stringify(thrown)
+            : String(thrown)
+        throw new Error(
+          `@Feature onDeny must return an Error instance; received ${description}`,
+        )
+      }
+      throw thrown
+    }
+    throw new NotFoundException()
   }
 }
