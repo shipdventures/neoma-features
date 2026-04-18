@@ -3,6 +3,7 @@ import { APP_GUARD } from "@nestjs/core"
 
 import { ConfigurableModuleClass } from "./features.module-definition"
 import { FeatureGuard } from "./guards/feature.guard"
+import { FeaturesService } from "./services/features.service"
 
 /**
  * Feature flagging module for NestJS applications.
@@ -44,10 +45,12 @@ import { FeatureGuard } from "./guards/feature.guard"
  */
 @Module({
   providers: [
+    FeaturesService,
     {
       provide: APP_GUARD,
       useClass: FeatureGuard,
     },
   ],
+  exports: [FeaturesService],
 })
 export class FeaturesModule extends ConfigurableModuleClass {}
