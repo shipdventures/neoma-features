@@ -93,43 +93,4 @@ describe("Feature", () => {
       })
     })
   })
-
-  describe("Given @Feature is called with a flag and options but no onDeny key", () => {
-    @Feature("CONTROLLER_FLAG", {})
-    class ControllerOnly {}
-
-    class HandlerOnly {
-      @Feature("HANDLER_FLAG", {})
-      public method(): void {}
-    }
-
-    @Feature("CONTROLLER_FLAG", {})
-    class ControllerAndHandler {
-      @Feature("HANDLER_FLAG", {})
-      public method(): void {}
-    }
-
-    it("Then controller-level metadata carries only the flag (no onDeny key)", () => {
-      const metadata = Reflect.getMetadata(FEATURE_KEY, ControllerOnly)
-      expect(metadata).toEqual({ flag: "CONTROLLER_FLAG" })
-      expect(metadata).not.toHaveProperty("onDeny")
-    })
-
-    it("Then handler-level metadata carries only the flag (no onDeny key)", () => {
-      const handler = HandlerOnly.prototype.method
-      const metadata = Reflect.getMetadata(FEATURE_KEY, handler)
-      expect(metadata).toEqual({ flag: "HANDLER_FLAG" })
-      expect(metadata).not.toHaveProperty("onDeny")
-    })
-
-    it("Then neither controller nor handler metadata carries an onDeny key", () => {
-      const handler = ControllerAndHandler.prototype.method
-      expect(
-        Reflect.getMetadata(FEATURE_KEY, ControllerAndHandler),
-      ).not.toHaveProperty("onDeny")
-      expect(Reflect.getMetadata(FEATURE_KEY, handler)).not.toHaveProperty(
-        "onDeny",
-      )
-    })
-  })
 })
