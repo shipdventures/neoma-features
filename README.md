@@ -192,24 +192,24 @@ flags[name] === true || (await resolve(req))[name] === true
 
 ### 5. Customising the Deny Response
 
-By default, a denied request returns `HTTP 404` via `NotFoundException`. For some routes — webhook receivers in particular — a 404 is the wrong signal, because most providers (Resend, Svix, Stripe) retry indefinitely on 404. Supply an `onDeny` factory on the decorator to control what is thrown on the deny path:
+By default, a denied request returns `HTTP 404` via `NotFoundException`. For some routes — webhook receivers, for instance — a 404 is the wrong signal. Supply an `onDeny` factory on the decorator to control what is thrown on the deny path:
 
 ```typescript
-import { Controller, ForbiddenException, Post, Req } from "@nestjs/common"
+import { Controller, ForbiddenException, Post } from "@nestjs/common"
 import { Feature } from "@neoma/features"
 
-@Controller("webhooks")
-export class WebhooksController {
-  @Post("resend")
-  @Feature("RESEND_WEBHOOK", {
+@Controller("checkout")
+export class CheckoutController {
+  @Post()
+  @Feature("CHECKOUT_V2", {
     onDeny: (req) =>
       new ForbiddenException({
-        message: "Webhook receiver disabled",
-        requestId: req.headers["svix-id"],
+        message: "Checkout disabled",
+        requestId: req.headers["x-request-id"],
       }),
   })
-  async resend() {
-    // Handle the webhook
+  async checkout() {
+    // Handle the request
   }
 }
 ```
@@ -220,7 +220,7 @@ The factory receives the live express `Request` — the same one the resolver wo
 
 **Handler-level `@Feature` fully overrides class-level.** When a handler re-declares `@Feature` without options, the class-level `onDeny` is discarded — the handler falls back to the default `NotFoundException`. There is no field-level inheritance; each `@Feature` stands on its own.
 
-**Return type is `Error`.** The factory must return an `Error` instance — typically an `HttpException` subclass (`ForbiddenException`, `UnauthorizedException`, etc.), formatted automatically by Nest's default exception filter. A plain `new Error(...)` works too, but requires your own `ExceptionFilter` to format the response. Returning a non-`Error` value (`null`, `undefined`, a string, a plain object) is a programmer mistake: the guard throws a descriptive `Error` naming the contract rather than passing the bogus value into Nest's exception pipeline.
+**Whatever you return is thrown.** The guard throws the value returned by `onDeny` as-is. Typically that's an `HttpException` subclass (`ForbiddenException`, `UnauthorizedException`, etc.) so Nest's default exception filter formats the response — but you can return any value as long as your exception pipeline can handle it. It's the consumer's responsibility.
 
 ## How It Works
 
@@ -319,10 +319,10 @@ interface FeatureOptions {
 ### `FeatureOnDeny`
 
 ```typescript
-type FeatureOnDeny = (req: Request) => Error
+type FeatureOnDeny = (req: Request) => unknown
 ```
 
-Invoked only on deny. Receives the live express `Request`. Returns the `Error` to throw — typically an `HttpException` subclass. Plain `Error`s require a custom `ExceptionFilter` to format the response. Returning a non-`Error` value is a programmer mistake and will cause the guard to throw a descriptive `Error` naming the contract.
+Invoked only on deny. Receives the live express `Request`. Whatever it returns is thrown by the guard as-is — typically an `HttpException` subclass (e.g. `ForbiddenException`) so Nest's default exception filter formats the response. Any other value works too provided your exception pipeline handles it; that's the consumer's responsibility.
 
 ## License
 

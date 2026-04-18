@@ -15,7 +15,7 @@ export class OnDenyController {
   @Feature("DISABLED_FEATURE", {
     onDeny: () =>
       new ForbiddenException({
-        message: "Webhook receiver disabled",
+        message: "Feature disabled",
       }),
   })
   public disabled(): string {
@@ -26,8 +26,8 @@ export class OnDenyController {
   @Feature("DISABLED_FEATURE", {
     onDeny: (req) =>
       new ForbiddenException({
-        message: "Webhook receiver disabled",
-        requestId: req.headers["x-svix-id"],
+        message: "Feature disabled",
+        requestId: req.headers["x-test-id"],
       }),
   })
   public disabledWithHeader(): string {

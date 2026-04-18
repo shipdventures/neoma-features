@@ -17,86 +17,65 @@ appModules.forEach(([name, modulePath]) => {
       app = await managedAppInstance(modulePath)
     })
 
-    describe("Given a disabled @Feature with an onDeny factory returning ForbiddenException", () => {
-      it("Then the response is 403 (not 404)", async () => {
-        const server = app.getHttpServer()
-        const res = await request(server)
+    describe("Given a disabled @Feature with an onDeny factory", () => {
+      it("Then the consumer's custom exception surfaces at the wire", async () => {
+        await request(app.getHttpServer())
           .get("/on-deny/disabled")
           .expect(FORBIDDEN)
-        expect(res.body.message).toBe("Webhook receiver disabled")
+          .expect((res) => {
+            expect(res.body.message).toBe("Feature disabled")
+          })
       })
     })
 
     describe("Given an onDeny factory that reads request headers", () => {
-      it("Then the value extracted from the live Request is reflected in the response body", async () => {
-        const server = app.getHttpServer()
-        const svixId = "svix-123-abc"
-        const res = await request(server)
+      it("Then the value from the live Request is reflected in the response body", async () => {
+        const testId = "test-id-123-abc"
+        await request(app.getHttpServer())
           .get("/on-deny/disabled-with-header")
-          .set("x-svix-id", svixId)
+          .set("x-test-id", testId)
           .expect(FORBIDDEN)
-        expect(res.body.requestId).toBe(svixId)
+          .expect((res) => {
+            expect(res.body.requestId).toBe(testId)
+          })
       })
     })
 
-    describe("Given a fail-closed @Feature (flag absent from flags map and resolver output) with an onDeny factory", () => {
+    describe("Given a fail-closed @Feature (flag absent) with an onDeny factory", () => {
       it("Then the consumer's custom error surfaces with the distinctive 418 status", async () => {
-        const server = app.getHttpServer()
-        const res = await request(server)
+        await request(app.getHttpServer())
           .get("/on-deny/fail-closed")
           .expect(I_AM_A_TEAPOT)
-        expect(res.body.message).toBe("I'm a teapot — feature absent")
+          .expect((res) => {
+            expect(res.body.message).toBe("I'm a teapot — feature absent")
+          })
       })
     })
 
     describe("Given an enabled @Feature with an onDeny factory", () => {
       it("Then the route admits with 200 and onDeny is never observed", async () => {
-        const server = app.getHttpServer()
-        const res = await request(server).get("/on-deny/enabled").expect(OK)
-        expect(res.text).toBe("admitted")
+        await request(app.getHttpServer())
+          .get("/on-deny/enabled")
+          .expect(OK)
+          .expect((res) => {
+            expect(res.text).toBe("admitted")
+          })
       })
     })
 
     describe("Given a route without any @Feature decorator", () => {
       it("Then it responds 204 (onDeny never observed on ungated routes)", async () => {
-        const server = app.getHttpServer()
-        await request(server).get("/on-deny/ungated").expect(NO_CONTENT)
+        await request(app.getHttpServer())
+          .get("/on-deny/ungated")
+          .expect(NO_CONTENT)
       })
     })
 
     describe("Given a class-level @Feature with onDeny and a handler-level @Feature without options", () => {
-      it("Then handler-level fully overrides — deny falls back to NotFoundException (404), not class onDeny", async () => {
-        const server = app.getHttpServer()
-        await request(server)
+      it("Then handler-level fully overrides — deny falls back to NotFoundException (404)", async () => {
+        await request(app.getHttpServer())
           .get("/on-deny-class/handler-plain")
           .expect(NOT_FOUND)
-      })
-    })
-
-    describe("Regression smoke — existing routes under the new metadata shape", () => {
-      it("Then /status still returns 204", async () => {
-        const server = app.getHttpServer()
-        await request(server).get("/status").expect(NO_CONTENT)
-      })
-
-      it("Then /enabled still returns 200", async () => {
-        const server = app.getHttpServer()
-        await request(server).get("/enabled").expect(OK)
-      })
-
-      it("Then /disabled still returns 404 (default deny unchanged)", async () => {
-        const server = app.getHttpServer()
-        await request(server).get("/disabled").expect(NOT_FOUND)
-      })
-
-      it("Then /missing still returns 404 (fail-closed unchanged)", async () => {
-        const server = app.getHttpServer()
-        await request(server).get("/missing").expect(NOT_FOUND)
-      })
-
-      it("Then /gated/override still returns 200 (handler-level override unchanged)", async () => {
-        const server = app.getHttpServer()
-        await request(server).get("/gated/override").expect(OK)
       })
     })
   })

@@ -7,14 +7,17 @@ import {
 } from "@nestjs/common"
 import type { Request } from "express"
 
-import {
-  FEATURE_KEY,
-  type FeatureMetadata,
-} from "../decorators/feature.decorator"
+import { FEATURE_KEY } from "../decorators/feature.decorator"
 import {
   FEATURES_OPTIONS,
+  type FeatureOnDeny,
   type FeaturesModuleOptions,
 } from "../features.options"
+
+interface FeatureMetadata {
+  flag: string
+  onDeny?: FeatureOnDeny
+}
 
 /**
  * Guard that enforces feature flag gating.
@@ -46,12 +49,11 @@ export class FeatureGuard implements CanActivate {
    *
    * @param context - The current execution context
    * @returns `true` if the route is allowed
-   * @throws Throws `NotFoundException` by default when the feature flag is
+   * @throws `NotFoundException` by default when the feature flag is
    *   disabled or missing from both the static map and the resolver's
    *   returned map. When the decorator supplied an `onDeny` factory, the
-   *   `Error` it returns is thrown instead. If `onDeny` returns a non-`Error`
-   *   value, a descriptive `Error` is thrown to surface the contract
-   *   violation.
+   *   value it returns is thrown instead — whatever it is. The consumer's
+   *   exception filter is responsible for handling it.
    */
   public async canActivate(context: ExecutionContext): Promise<boolean> {
     const handler = context.getHandler()
@@ -79,17 +81,7 @@ export class FeatureGuard implements CanActivate {
     }
 
     if (onDeny) {
-      const thrown: unknown = onDeny(req)
-      if (!(thrown instanceof Error)) {
-        const description =
-          thrown !== null && typeof thrown === "object"
-            ? JSON.stringify(thrown)
-            : String(thrown)
-        throw new Error(
-          `@Feature onDeny must return an Error instance; received ${description}`,
-        )
-      }
-      throw thrown
+      throw onDeny(req)
     }
     throw new NotFoundException()
   }

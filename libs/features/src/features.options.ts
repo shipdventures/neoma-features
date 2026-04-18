@@ -76,24 +76,21 @@ export interface FeaturesModuleOptions {
 
 /**
  * Factory invoked by the feature guard on the deny path for a route whose
- * `@Feature` decorator supplied an `onDeny` option. The returned `Error` is
- * thrown by the guard — typically an `HttpException` subclass so Nest's
- * default exception filter formats the response.
+ * `@Feature` decorator supplied an `onDeny` option. Whatever is returned
+ * is thrown by the guard — typically an `HttpException` subclass so Nest's
+ * default exception filter formats the response, but consumers are free to
+ * return any value and pair it with their own exception filter.
  *
  * Invoked only on deny. Never invoked when the flag admits, and never
  * invoked for routes without `@Feature` metadata.
  *
- * Returning a non-`Error` value (`null`, `undefined`, a primitive, or a
- * plain object) is treated as a programmer mistake: the guard will throw a
- * descriptive `Error` naming the contract rather than passing the bogus
- * value into Nest's exception pipeline.
- *
  * @param req - The current express `Request`. Read headers, `req.user`, etc.
  *   directly — the signature mirrors {@link FeatureResolver} for consistency.
- * @returns The `Error` to throw. Typically an `HttpException` subclass
- *   (e.g. `ForbiddenException`).
+ * @returns The value to throw. The guard throws it as-is; it's the
+ *   consumer's responsibility to ensure the value is handled by their
+ *   exception pipeline.
  */
-export type FeatureOnDeny = (req: Request) => Error
+export type FeatureOnDeny = (req: Request) => unknown
 
 /**
  * Options accepted by the `@Feature` decorator.

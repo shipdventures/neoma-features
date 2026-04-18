@@ -3,74 +3,133 @@ import { ForbiddenException } from "@nestjs/common"
 import { FEATURE_KEY, Feature } from "./feature.decorator"
 
 describe("Feature", () => {
-  describe("Given @Feature applied to a route handler", () => {
-    const handler = (): void => {}
-    const descriptor: PropertyDescriptor = { value: handler }
-    Feature("MY_FLAG")({} as object, "method", descriptor)
+  describe("Given @Feature is called with a flag only", () => {
+    @Feature("CONTROLLER_FLAG")
+    class ControllerOnly {}
 
-    it("Then it should set the FEATURE_KEY metadata to { flag } only", () => {
-      expect(Reflect.getMetadata(FEATURE_KEY, handler)).toEqual({
-        flag: "MY_FLAG",
+    class HandlerOnly {
+      @Feature("HANDLER_FLAG")
+      public method(): void {}
+    }
+
+    @Feature("CONTROLLER_FLAG")
+    class ControllerAndHandler {
+      @Feature("HANDLER_FLAG")
+      public method(): void {}
+    }
+
+    it("Then controller-level metadata carries only the flag", () => {
+      expect(Reflect.getMetadata(FEATURE_KEY, ControllerOnly)).toEqual({
+        flag: "CONTROLLER_FLAG",
       })
+      expect(
+        Reflect.getMetadata(FEATURE_KEY, ControllerOnly),
+      ).not.toHaveProperty("onDeny")
     })
 
-    it("Then it should not set an onDeny key on the metadata", () => {
+    it("Then handler-level metadata carries only the flag", () => {
+      const handler = HandlerOnly.prototype.method
+      expect(Reflect.getMetadata(FEATURE_KEY, handler)).toEqual({
+        flag: "HANDLER_FLAG",
+      })
       expect(Reflect.getMetadata(FEATURE_KEY, handler)).not.toHaveProperty(
         "onDeny",
       )
     })
-  })
 
-  describe("Given @Feature applied to a controller class", () => {
-    @Feature("CLASS_FLAG")
-    class TestController {}
-
-    it("Then it should set the FEATURE_KEY metadata on the class", () => {
-      expect(Reflect.getMetadata(FEATURE_KEY, TestController)).toEqual({
-        flag: "CLASS_FLAG",
+    it("Then handler-level overrides controller-level with its own flag", () => {
+      const handler = ControllerAndHandler.prototype.method
+      expect(Reflect.getMetadata(FEATURE_KEY, ControllerAndHandler)).toEqual({
+        flag: "CONTROLLER_FLAG",
       })
-    })
-  })
-
-  describe("Given @Feature with an onDeny option on a handler", () => {
-    const onDeny = (): ForbiddenException => new ForbiddenException()
-    const handler = (): void => {}
-    const descriptor: PropertyDescriptor = { value: handler }
-    Feature("WITH_ON_DENY", { onDeny })({} as object, "method", descriptor)
-
-    it("Then the metadata carries both flag and onDeny", () => {
       expect(Reflect.getMetadata(FEATURE_KEY, handler)).toEqual({
-        flag: "WITH_ON_DENY",
-        onDeny,
+        flag: "HANDLER_FLAG",
       })
     })
   })
 
-  describe("Given @Feature with an empty options object on a handler", () => {
-    const handler = (): void => {}
-    const descriptor: PropertyDescriptor = { value: handler }
-    Feature("EMPTY_OPTIONS", {})({} as object, "method", descriptor)
+  describe("Given @Feature is called with a flag and an onDeny option", () => {
+    const controllerOnDeny = (): ForbiddenException => new ForbiddenException()
+    const handlerOnDeny = (): ForbiddenException => new ForbiddenException()
 
-    it("Then the metadata carries only flag (no onDeny key)", () => {
-      const metadata = Reflect.getMetadata(FEATURE_KEY, handler)
-      expect(metadata).toEqual({ flag: "EMPTY_OPTIONS" })
-      expect(metadata).not.toHaveProperty("onDeny")
+    @Feature("CONTROLLER_FLAG", { onDeny: controllerOnDeny })
+    class ControllerOnly {}
+
+    class HandlerOnly {
+      @Feature("HANDLER_FLAG", { onDeny: handlerOnDeny })
+      public method(): void {}
+    }
+
+    @Feature("CONTROLLER_FLAG", { onDeny: controllerOnDeny })
+    class ControllerAndHandler {
+      @Feature("HANDLER_FLAG", { onDeny: handlerOnDeny })
+      public method(): void {}
+    }
+
+    it("Then controller-level metadata carries flag and onDeny", () => {
+      expect(Reflect.getMetadata(FEATURE_KEY, ControllerOnly)).toEqual({
+        flag: "CONTROLLER_FLAG",
+        onDeny: controllerOnDeny,
+      })
+    })
+
+    it("Then handler-level metadata carries flag and onDeny", () => {
+      const handler = HandlerOnly.prototype.method
+      expect(Reflect.getMetadata(FEATURE_KEY, handler)).toEqual({
+        flag: "HANDLER_FLAG",
+        onDeny: handlerOnDeny,
+      })
+    })
+
+    it("Then handler-level fully overrides controller-level (its own flag and onDeny)", () => {
+      const handler = ControllerAndHandler.prototype.method
+      expect(Reflect.getMetadata(FEATURE_KEY, ControllerAndHandler)).toEqual({
+        flag: "CONTROLLER_FLAG",
+        onDeny: controllerOnDeny,
+      })
+      expect(Reflect.getMetadata(FEATURE_KEY, handler)).toEqual({
+        flag: "HANDLER_FLAG",
+        onDeny: handlerOnDeny,
+      })
     })
   })
 
-  describe("Given @Feature with options.onDeny explicitly undefined", () => {
-    const handler = (): void => {}
-    const descriptor: PropertyDescriptor = { value: handler }
-    Feature("EXPLICIT_UNDEFINED", { onDeny: undefined })(
-      {} as object,
-      "method",
-      descriptor,
-    )
+  describe("Given @Feature is called with a flag and options but no onDeny key", () => {
+    @Feature("CONTROLLER_FLAG", {})
+    class ControllerOnly {}
 
-    it("Then the metadata carries only flag (no onDeny key)", () => {
-      const metadata = Reflect.getMetadata(FEATURE_KEY, handler)
-      expect(metadata).toEqual({ flag: "EXPLICIT_UNDEFINED" })
+    class HandlerOnly {
+      @Feature("HANDLER_FLAG", {})
+      public method(): void {}
+    }
+
+    @Feature("CONTROLLER_FLAG", {})
+    class ControllerAndHandler {
+      @Feature("HANDLER_FLAG", {})
+      public method(): void {}
+    }
+
+    it("Then controller-level metadata carries only the flag (no onDeny key)", () => {
+      const metadata = Reflect.getMetadata(FEATURE_KEY, ControllerOnly)
+      expect(metadata).toEqual({ flag: "CONTROLLER_FLAG" })
       expect(metadata).not.toHaveProperty("onDeny")
+    })
+
+    it("Then handler-level metadata carries only the flag (no onDeny key)", () => {
+      const handler = HandlerOnly.prototype.method
+      const metadata = Reflect.getMetadata(FEATURE_KEY, handler)
+      expect(metadata).toEqual({ flag: "HANDLER_FLAG" })
+      expect(metadata).not.toHaveProperty("onDeny")
+    })
+
+    it("Then neither controller nor handler metadata carries an onDeny key", () => {
+      const handler = ControllerAndHandler.prototype.method
+      expect(
+        Reflect.getMetadata(FEATURE_KEY, ControllerAndHandler),
+      ).not.toHaveProperty("onDeny")
+      expect(Reflect.getMetadata(FEATURE_KEY, handler)).not.toHaveProperty(
+        "onDeny",
+      )
     })
   })
 })

@@ -3,19 +3,6 @@ import { SetMetadata } from "@nestjs/common"
 import type { FeatureOptions } from "../features.options"
 
 /**
- * Shape of the metadata stored under `FEATURE_KEY`. Migrated from a bare
- * `string` in v0.1/v0.2 to an object in v0.3 so the decorator can carry
- * additional per-route options (e.g. `onDeny`) without introducing parallel
- * metadata keys.
- *
- * @internal Not part of the public API — consumers use `@Feature(...)`.
- */
-export interface FeatureMetadata {
-  flag: string
-  onDeny?: FeatureOptions["onDeny"]
-}
-
-/**
  * Metadata key used by the feature guard to read the flag + options.
  *
  * @internal Not part of the public API.
@@ -42,24 +29,20 @@ export const FEATURE_KEY = "neoma:feature"
  * @Feature("UPLOAD_BANK_STATEMENT")
  * ```
  *
- * @example Custom deny exception (e.g. 403 for a webhook receiver)
+ * @example Custom deny exception
  * ```typescript
- * @Feature("RESEND_WEBHOOK", {
+ * @Feature("CHECKOUT_V2", {
  *   onDeny: (req) =>
  *     new ForbiddenException({
- *       message: "Webhook receiver disabled",
- *       requestId: req.headers["svix-id"],
+ *       message: "Checkout disabled",
+ *       requestId: req.headers["x-request-id"],
  *     }),
  * })
  * ```
  */
 export function Feature(
   flag: string,
-  options?: FeatureOptions,
+  options: FeatureOptions = {},
 ): ClassDecorator & MethodDecorator {
-  const metadata: FeatureMetadata = { flag }
-  if (options?.onDeny !== undefined) {
-    metadata.onDeny = options.onDeny
-  }
-  return SetMetadata(FEATURE_KEY, metadata)
+  return SetMetadata(FEATURE_KEY, { flag, ...options })
 }
