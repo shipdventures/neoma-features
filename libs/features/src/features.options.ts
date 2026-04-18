@@ -97,11 +97,11 @@ export type FeatureOnDeny = (req: Request) => unknown
  *
  * @example Override the default `NotFoundException` on deny
  * ```typescript
- * @Feature("RESEND_WEBHOOK", {
+ * @Feature("CHECKOUT_V2", {
  *   onDeny: (req) =>
  *     new ForbiddenException({
- *       message: "Webhook receiver disabled",
- *       requestId: req.headers["svix-id"],
+ *       message: "Checkout disabled",
+ *       requestId: req.headers["x-request-id"],
  *     }),
  * })
  * ```

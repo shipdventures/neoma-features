@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   type ExecutionContext,
   ForbiddenException,
   NotFoundException,
@@ -84,6 +85,12 @@ class ClassPlainHandlerOnDeny {
 
 @Feature("CLASS_FLAG", { onDeny: onDenyForbidden })
 class ClassOnlyOnDeny {
+  public method(): void {}
+}
+
+@Feature("X", { onDeny: () => new ForbiddenException() })
+class ClassAndHandlerOnDeny {
+  @Feature("X", { onDeny: () => new ConflictException() })
   public method(): void {}
 }
 
@@ -256,22 +263,13 @@ describe("FeatureGuard", () => {
       ).rejects.toBe("denied")
     })
 
-    it("Then onDeny receives the same express Request the guard extracted", async () => {
-      let received: unknown
-      const onDeny = jest.fn((req: unknown) => {
-        received = req
-        return new ForbiddenException()
+    it("Then onDeny runs when an async resolver denies X (no static flag present)", async () => {
+      const guard = await createGuard({
+        resolve: async () => ({ X: false }),
       })
-      class Captures {
-        @Feature("X", { onDeny })
-        public method(): void {}
-      }
-      const guard = await createGuard({ flags: { X: false } })
-      const req = express.request()
       await expect(
-        guard.canActivate(ctxFor(Captures, "method", req)),
-      ).rejects.toThrow(ForbiddenException)
-      expect(received).toBe(req)
+        guard.canActivate(ctxFor(HandlerXWithOnDeny, "method")),
+      ).rejects.toBe(forbidden)
     })
   })
 
@@ -317,6 +315,13 @@ describe("FeatureGuard", () => {
       await expect(
         guard.canActivate(ctxFor(ClassOnlyOnDeny, "method")),
       ).rejects.toBe(forbidden)
+    })
+
+    it("Then the handler-level onDeny fully overrides the class-level onDeny", async () => {
+      const guard = await createGuard({ flags: { X: false } })
+      await expect(
+        guard.canActivate(ctxFor(ClassAndHandlerOnDeny, "method")),
+      ).rejects.toBeInstanceOf(ConflictException)
     })
   })
 

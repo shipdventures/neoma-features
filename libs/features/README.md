@@ -192,7 +192,7 @@ flags[name] === true || (await resolve(req))[name] === true
 
 ### 5. Customising the Deny Response
 
-By default, a denied request returns `HTTP 404` via `NotFoundException`. For some routes — webhook receivers, for instance — a 404 is the wrong signal. Supply an `onDeny` factory on the decorator to control what is thrown on the deny path:
+By default, a denied request returns `HTTP 404` via `NotFoundException`. For some routes a 404 is the wrong signal — you may want `403 Forbidden`, `409 Conflict`, or a custom payload that tells the caller *why* the route is unavailable. Supply an `onDeny` factory on the decorator to control what is thrown on the deny path:
 
 ```typescript
 import { Controller, ForbiddenException, Post } from "@nestjs/common"
@@ -301,7 +301,7 @@ class MyController {}
   onDeny: (req) => new ForbiddenException("disabled"),
 })
 @Get()
-myWebhook() {}
+myRoute() {}
 ```
 
 ### `FeatureOptions`
