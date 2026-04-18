@@ -1,4 +1,5 @@
-import { type ExecutionContext, Module } from "@nestjs/common"
+import { Module } from "@nestjs/common"
+import type { Request } from "express"
 
 import { FeaturesModule } from "@lib"
 
@@ -7,8 +8,7 @@ import { ResolverController } from "./resolver.controller"
 @Module({
   imports: [
     FeaturesModule.forRoot({
-      resolve: (ctx: ExecutionContext): Record<string, boolean> => {
-        const req = ctx.switchToHttp().getRequest()
+      resolve: (req: Request): Record<string, boolean> => {
         const header = req.headers?.["x-features"]
         if (typeof header === "string" && header === "RESOLVER_ENABLED") {
           return { RESOLVER_ENABLED: true }

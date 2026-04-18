@@ -38,10 +38,7 @@ import { FeatureGuard } from "./guards/feature.guard"
  * ```typescript
  * FeaturesModule.forRoot({
  *   flags: { CHECKOUT_V2: true },
- *   resolve: (ctx) => {
- *     const req = ctx.switchToHttp().getRequest()
- *     return req.user?.features ?? {}
- *   },
+ *   resolve: (req) => req.user?.features ?? {},
  * })
  * ```
  */

@@ -53,8 +53,10 @@ npm install @neoma/features
 ### Peer Dependencies
 
 ```bash
-npm install @nestjs/common @nestjs/core reflect-metadata rxjs
+npm install @nestjs/common @nestjs/core reflect-metadata rxjs express
 ```
+
+`@neoma/features` requires `express` as a peer dependency — the per-request resolver receives the express `Request`. Fastify is not supported at this signature.
 
 ## Basic Usage
 
@@ -154,18 +156,51 @@ export class DashboardController {
 
 When both the controller and a handler have `@Feature`, the handler-level flag takes priority (most specific wins).
 
+### 4. Compute Flags Per Request
+
+Static `flags` are the same for every request. For flags that vary per user, tenant, or request context, provide a `resolve` function. The guard invokes it on every gated request and unions the result with the static `flags` map.
+
+```typescript
+FeaturesModule.forRoot({
+  flags: { CHECKOUT_V2: true },
+  resolve: (req) => req.user?.features ?? {},
+})
+```
+
+Resolvers can be async and can pull from any service via `forRootAsync`:
+
+```typescript
+FeaturesModule.forRootAsync({
+  imports: [UsersModule],
+  inject: [UserService],
+  useFactory: (users: UserService) => ({
+    flags: { CHECKOUT_V2: true },
+    resolve: async (req) => users.featuresFor(req.user.id),
+  }),
+})
+```
+
+**Union semantics.** A request is admitted for `@Feature(name)` when:
+
+```
+flags[name] === true || (await resolve(req))[name] === true
+```
+
+**Static wins.** A resolver returning `{ name: false }` does NOT override a static `flags[name] === true`. Use static flags for hard on/off; use the resolver to grant additional access per request.
+
+**When to use which.** Reach for static `flags` when a feature is on or off for everyone (env-driven rollout, kill switch). Reach for `resolve` when availability depends on the request itself (user entitlements, tenant plans, A/B cohort).
+
 ## How It Works
 
 - A global `APP_GUARD` reads `@Feature` metadata from the handler and controller.
 - Handler-level metadata is checked first; if absent, controller-level metadata is used.
-- The flag name is looked up in the `flags` record provided via `forRoot` or `forRootAsync`.
-- If the flag is `true`, the request proceeds normally.
-- If the flag is `false` or absent from the record, the guard throws `NotFoundException` (HTTP 404).
-- Routes without any `@Feature` decorator are always accessible.
+- The flag name is looked up in the static `flags` record and, if provided, in the result of `resolve(req)`. The request is admitted when either source yields `=== true`.
+- If neither source yields `true`, the guard throws `NotFoundException` (HTTP 404).
+- Routes without any `@Feature` decorator are always accessible — the resolver is not invoked for ungated routes.
 
 ### Fail-Closed Semantics
 
-A flag that is not present in the `flags` record is treated as disabled. This means you must explicitly set a flag to `true` to enable a route. This prevents accidentally exposing routes when a flag name is misspelled or forgotten.
+A flag that is not present in the `flags` record — and not returned as `true` by the resolver — is treated as disabled. You must explicitly set a flag to `true` (statically or via the resolver) to enable a route. This prevents accidentally exposing routes when a flag name is misspelled or forgotten.
 
 ## API Reference
 
@@ -182,8 +217,35 @@ NestJS module that registers the feature guard globally.
 
 ```typescript
 interface FeaturesModuleOptions {
-  /** A record of feature flag names to their enabled/disabled state. */
-  flags: Record<string, boolean>
+  /**
+   * Static feature flag map. Missing flags are treated as disabled.
+   * Optional — a consumer may configure only `resolve`.
+   */
+  flags?: Record<string, boolean>
+
+  /**
+   * Per-request resolver. Unioned with `flags` under strict `=== true`
+   * semantics; a resolver returning `false` does NOT override static `true`.
+   */
+  resolve?: FeatureResolver
+}
+```
+
+### `FeatureResolver`
+
+```typescript
+type FeatureResolver = (
+  req: Request,
+) => Record<string, boolean> | Promise<Record<string, boolean>>
+```
+
+The `Request` is the express request type (`import type { Request } from "express"`). Import `FeatureResolver` when you need to annotate a `useFactory` return or extract the resolver to its own function:
+
+```typescript
+import type { FeatureResolver } from "@neoma/features"
+
+const resolve: FeatureResolver = async (req) => {
+  return req.user?.features ?? {}
 }
 ```
 

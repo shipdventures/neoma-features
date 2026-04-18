@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common"
+import type { Request } from "express"
 
 import { FEATURE_KEY } from "../decorators/feature.decorator"
 import {
@@ -61,7 +62,8 @@ export class FeatureGuard implements CanActivate {
       return true
     }
 
-    const resolved = await resolve?.(context)
+    const req = context.switchToHttp().getRequest<Request>()
+    const resolved = await resolve?.(req)
     if (resolved?.[flag] === true) {
       return true
     }
