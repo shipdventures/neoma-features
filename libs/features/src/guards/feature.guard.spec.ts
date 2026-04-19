@@ -6,7 +6,6 @@ import {
 } from "@nestjs/common"
 import { ContextIdFactory } from "@nestjs/core"
 import { Test } from "@nestjs/testing"
-import type { Request } from "express"
 import { express } from "fixtures/express"
 import { executionContext } from "fixtures/nestjs"
 
@@ -16,16 +15,8 @@ import { FeaturesService } from "../services/features.service"
 
 import { FeatureGuard } from "./feature.guard"
 
-/**
- * Resolve a request-scoped `FeatureGuard` wired to a stub
- * `FeaturesService` whose `isEnabled` behaviour the test controls. We
- * build a real testing module, bind a fake express request to a fresh
- * `ContextId`, then `moduleRef.resolve` to obtain the per-test guard
- * instance — the same DI path production uses.
- */
 async function resolveGuard(
   isEnabled: jest.Mock = jest.fn().mockResolvedValue(true),
-  req: Request = express.request() as unknown as Request,
 ): Promise<{ guard: FeatureGuard; isEnabled: jest.Mock }> {
   const moduleRef = await Test.createTestingModule({
     providers: [
@@ -34,10 +25,7 @@ async function resolveGuard(
     ],
   }).compile()
 
-  const contextId = ContextIdFactory.create()
-  moduleRef.registerRequestByContextId(req, contextId)
-
-  const guard = await moduleRef.resolve(FeatureGuard, contextId)
+  const guard = await moduleRef.resolve(FeatureGuard, ContextIdFactory.create())
   return { guard, isEnabled }
 }
 
@@ -216,10 +204,7 @@ describe("FeatureGuard", () => {
           @Feature("X", { onDeny })
           public method(): void {}
         }
-        const { guard } = await resolveGuard(
-          jest.fn().mockResolvedValue(false),
-          req as unknown as Request,
-        )
+        const { guard } = await resolveGuard(jest.fn().mockResolvedValue(false))
         await expect(
           guard.canActivate(ctxFor(HandlerWithOnDeny, "method", req)),
         ).rejects.toBeInstanceOf(ForbiddenException)

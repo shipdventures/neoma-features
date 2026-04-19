@@ -51,13 +51,16 @@ import {
 @Injectable({ scope: Scope.REQUEST })
 export class FeaturesService {
   /**
+   * Binds the module-wide options and the in-flight request so that
+   * `isEnabled` can mirror the guard's admit rule on demand. A new
+   * instance is created for every HTTP call because the service is
+   * `Scope.REQUEST` — that is what makes `@Inject(REQUEST)` safe here.
+   *
    * @param options - Module options resolved at bootstrap via the
    *   `FEATURES_OPTIONS` token. Holds the static `flags` map and the optional
    *   per-request `resolve` function that this service must mirror exactly.
    * @param request - The in-flight express `Request`, injected via Nest's
-   *   `REQUEST` token. The service is `Scope.REQUEST` so each HTTP call
-   *   receives its own instance bound to its own request, which is then
-   *   passed unchanged to the consumer's resolver.
+   *   `REQUEST` token. Passed unchanged to the consumer's resolver.
    */
   public constructor(
     @Inject(FEATURES_OPTIONS)
