@@ -1,18 +1,16 @@
 import {
   type CanActivate,
   type ExecutionContext,
-  Inject,
   Injectable,
   NotFoundException,
+  Scope,
 } from "@nestjs/common"
+import { Reflector } from "@nestjs/core"
 import type { Request } from "express"
 
 import { FEATURE_KEY } from "../decorators/feature.decorator"
-import {
-  FEATURES_OPTIONS,
-  type FeatureOnDeny,
-  type FeaturesModuleOptions,
-} from "../features.options"
+import { type FeatureOnDeny } from "../features.options"
+import { FeaturesService } from "../services/features.service"
 
 interface FeatureMetadata {
   flag: string
@@ -22,26 +20,25 @@ interface FeatureMetadata {
 /**
  * Guard that enforces feature flag gating.
  *
- * Reads the `@Feature` metadata from the handler or controller using raw
- * `Reflect.getMetadata` and admits the request when either the static `flags`
- * map or the optional per-request `resolve` function reports the flag as
- * strictly `true`. Throws `NotFoundException` by default, or the value
+ * Reads the `@Feature` metadata from the handler or controller via the
+ * `Reflector` and delegates the admit decision to the request-scoped
+ * `FeaturesService`. Throws `NotFoundException` by default, or the value
  * returned by the decorator's `onDeny` factory when one is supplied
  * (fail-closed). Routes without `@Feature` metadata are allowed through
  * unconditionally.
  *
  * Handler-level metadata takes priority over class-level metadata. The
- * resolver is invoked lazily — only when the static path did not already
- * admit — and its return value is awaited uniformly so sync and async
- * resolvers share the same code path.
+ * guard itself is request-scoped so it can accept `FeaturesService` as a
+ * direct constructor dependency — both share the same request-scoped DI
+ * subtree.
  *
  * @internal Registered globally via `APP_GUARD` -- not exported.
  */
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class FeatureGuard implements CanActivate {
   public constructor(
-    @Inject(FEATURES_OPTIONS)
-    private readonly options: FeaturesModuleOptions,
+    private readonly reflector: Reflector,
+    private readonly features: FeaturesService,
   ) {}
 
   /**
@@ -56,33 +53,21 @@ export class FeatureGuard implements CanActivate {
    *   exception filter is responsible for handling it.
    */
   public async canActivate(context: ExecutionContext): Promise<boolean> {
-    const handler = context.getHandler()
-    const cls = context.getClass()
+    const metadata = this.reflector.getAllAndOverride<FeatureMetadata>(
+      FEATURE_KEY,
+      [context.getHandler(), context.getClass()],
+    )
 
-    const metadata: FeatureMetadata | undefined =
-      Reflect.getMetadata(FEATURE_KEY, handler) ??
-      Reflect.getMetadata(FEATURE_KEY, cls)
-
-    if (metadata === undefined) {
+    if (!metadata) {
       return true
     }
 
-    const { flag, onDeny } = metadata
-    const { flags, resolve } = this.options
-    const staticAdmits = flags?.[flag] === true
-    if (staticAdmits) {
+    const enabled = await this.features.isEnabled(metadata.flag)
+    if (enabled) {
       return true
     }
 
     const req = context.switchToHttp().getRequest<Request>()
-    const resolved = await resolve?.(req)
-    if (resolved?.[flag] === true) {
-      return true
-    }
-
-    if (onDeny) {
-      throw onDeny(req)
-    }
-    throw new NotFoundException()
+    throw metadata.onDeny?.(req) ?? new NotFoundException()
   }
 }

@@ -9,22 +9,23 @@ import { express } from "fixtures/express"
 import { executionContext } from "fixtures/nestjs"
 
 import { Feature } from "../decorators/feature.decorator"
-import {
-  FEATURES_OPTIONS,
-  type FeatureOnDeny,
-  type FeaturesModuleOptions,
-} from "../features.options"
+import { type FeatureOnDeny } from "../features.options"
+import { FeaturesService } from "../services/features.service"
 
 import { FeatureGuard } from "./feature.guard"
 
-async function createGuard(
-  options: FeaturesModuleOptions = {},
-): Promise<FeatureGuard> {
-  const module = await Test.createTestingModule({
-    providers: [FeatureGuard, { provide: FEATURES_OPTIONS, useValue: options }],
+async function resolveGuard(
+  isEnabled: jest.Mock = jest.fn().mockResolvedValue(true),
+): Promise<{ guard: FeatureGuard; isEnabled: jest.Mock }> {
+  const moduleRef = await Test.createTestingModule({
+    providers: [
+      FeatureGuard,
+      { provide: FeaturesService, useValue: { isEnabled } },
+    ],
   }).compile()
 
-  return module.get(FeatureGuard)
+  const guard = await moduleRef.resolve(FeatureGuard)
+  return { guard, isEnabled }
 }
 
 function ctxFor(
@@ -49,11 +50,6 @@ class Ungated {
 
 class HandlerX {
   @Feature("X")
-  public method(): void {}
-}
-
-@Feature("X")
-class ClassX {
   public method(): void {}
 }
 
@@ -83,11 +79,6 @@ class ClassPlainHandlerOnDeny {
   public method(): void {}
 }
 
-@Feature("CLASS_FLAG", { onDeny: onDenyForbidden })
-class ClassOnlyOnDeny {
-  public method(): void {}
-}
-
 @Feature("X", { onDeny: () => new ForbiddenException() })
 class ClassAndHandlerOnDeny {
   @Feature("X", { onDeny: () => new ConflictException() })
@@ -98,258 +89,167 @@ class ClassAndHandlerOnDeny {
 
 describe("FeatureGuard", () => {
   describe("Given a route with no @Feature metadata", () => {
-    it("Then canActivate returns true", async () => {
-      const guard = await createGuard({ flags: { X: true } })
-      await expect(guard.canActivate(ctxFor(Ungated, "method"))).resolves.toBe(
-        true,
-      )
+    describe("When canActivate is called", () => {
+      it("Then it returns true without calling FeaturesService.isEnabled", async () => {
+        const { guard, isEnabled } = await resolveGuard()
+        await expect(
+          guard.canActivate(ctxFor(Ungated, "method")),
+        ).resolves.toBe(true)
+        expect(isEnabled).not.toHaveBeenCalled()
+      })
     })
   })
 
-  describe("Given @Feature('X') on a handler", () => {
-    const denyCases: Array<[string, FeaturesModuleOptions]> = [
-      ["flags explicitly deny X", { flags: { X: false } }],
-      ["X is absent from flags", { flags: {} }],
-      ["no flags nor resolver are configured", {}],
-    ]
-
-    it("Then flags admitting X resolves true", async () => {
-      const guard = await createGuard({ flags: { X: true } })
-      await expect(guard.canActivate(ctxFor(HandlerX, "method"))).resolves.toBe(
-        true,
-      )
+  describe("Given a handler with @Feature('X') metadata", () => {
+    describe("When FeaturesService.isEnabled resolves true", () => {
+      it("Then canActivate admits (returns true) and delegates with the handler flag", async () => {
+        const isEnabled = jest.fn().mockResolvedValue(true)
+        const { guard } = await resolveGuard(isEnabled)
+        await expect(
+          guard.canActivate(ctxFor(HandlerX, "method")),
+        ).resolves.toBe(true)
+        expect(isEnabled).toHaveBeenCalledWith("X")
+      })
     })
 
-    denyCases.forEach(([label, options]) => {
-      it(`Then it throws NotFoundException when ${label}`, async () => {
-        const guard = await createGuard(options)
+    describe("When FeaturesService.isEnabled resolves false and no onDeny is set", () => {
+      it("Then canActivate throws NotFoundException", async () => {
+        const isEnabled = jest.fn().mockResolvedValue(false)
+        const { guard } = await resolveGuard(isEnabled)
         await expect(
           guard.canActivate(ctxFor(HandlerX, "method")),
         ).rejects.toThrow(NotFoundException)
       })
     })
-  })
 
-  describe("Given @Feature('X') on a controller class (no handler override)", () => {
-    it("Then the class-level flag gates the route", async () => {
-      const guard = await createGuard({ flags: { X: false } })
-      await expect(guard.canActivate(ctxFor(ClassX, "method"))).rejects.toThrow(
-        NotFoundException,
-      )
-    })
-  })
-
-  describe("Given @Feature on both controller and handler", () => {
-    it("Then the handler-level flag wins when it admits", async () => {
-      const guard = await createGuard({
-        flags: { CLASS_FLAG: false, HANDLER_FLAG: true },
+    describe("When FeaturesService.isEnabled rejects", () => {
+      it("Then the rejection propagates unchanged and onDeny is not invoked", async () => {
+        const boom = new Error("isEnabled rejected")
+        const onDeny = jest.fn().mockReturnValue(new ForbiddenException())
+        class HandlerWithOnDeny {
+          @Feature("X", { onDeny })
+          public method(): void {}
+        }
+        const { guard } = await resolveGuard(jest.fn().mockRejectedValue(boom))
+        await expect(
+          guard.canActivate(ctxFor(HandlerWithOnDeny, "method")),
+        ).rejects.toBe(boom)
+        expect(onDeny).not.toHaveBeenCalled()
       })
-      await expect(
-        guard.canActivate(ctxFor(ClassAndHandler, "method")),
-      ).resolves.toBe(true)
-    })
-
-    it("Then the handler-level flag wins when it denies (class flag admits)", async () => {
-      const guard = await createGuard({
-        flags: { CLASS_FLAG: true, HANDLER_FLAG: false },
-      })
-      await expect(
-        guard.canActivate(ctxFor(ClassAndHandler, "method")),
-      ).rejects.toThrow(NotFoundException)
     })
   })
 
-  describe("Given a resolver", () => {
-    it("Then a resolver that admits X resolves true", async () => {
-      const guard = await createGuard({ resolve: async () => ({ X: true }) })
-      await expect(guard.canActivate(ctxFor(HandlerX, "method"))).resolves.toBe(
-        true,
-      )
-    })
-
-    it("Then a resolver that denies X throws NotFoundException", async () => {
-      const guard = await createGuard({ resolve: async () => ({ X: false }) })
-      await expect(
-        guard.canActivate(ctxFor(HandlerX, "method")),
-      ).rejects.toThrow(NotFoundException)
-    })
-
-    it("Then static-true wins over resolver-false (union, static first)", async () => {
-      const resolver = jest.fn().mockResolvedValue({ X: false })
-      const guard = await createGuard({
-        flags: { X: true },
-        resolve: resolver,
+  describe("Given @Feature with an onDeny factory on the deny path", () => {
+    describe("When FeaturesService.isEnabled resolves false", () => {
+      it("Then the value returned by onDeny is thrown (not NotFoundException)", async () => {
+        const { guard } = await resolveGuard(jest.fn().mockResolvedValue(false))
+        await expect(
+          guard.canActivate(ctxFor(HandlerXWithOnDeny, "method")),
+        ).rejects.toBe(forbidden)
       })
-      await expect(guard.canActivate(ctxFor(HandlerX, "method"))).resolves.toBe(
-        true,
-      )
-      expect(resolver).not.toHaveBeenCalled()
     })
 
-    it("Then resolver-true admits even when flags deny (union)", async () => {
-      const guard = await createGuard({
-        flags: { X: false },
-        resolve: async () => ({ X: true }),
+    describe("When onDeny throws synchronously", () => {
+      it("Then the thrown value propagates", async () => {
+        const boom = new Error("onDeny exploded")
+        class Throws {
+          @Feature("X", {
+            onDeny: () => {
+              throw boom
+            },
+          })
+          public method(): void {}
+        }
+        const { guard } = await resolveGuard(jest.fn().mockResolvedValue(false))
+        await expect(guard.canActivate(ctxFor(Throws, "method"))).rejects.toBe(
+          boom,
+        )
       })
-      await expect(guard.canActivate(ctxFor(HandlerX, "method"))).resolves.toBe(
-        true,
-      )
     })
 
-    it("Then a resolver rejection propagates unchanged", async () => {
-      const boom = new Error("resolver rejected")
-      const onDeny = jest.fn().mockReturnValue(new ForbiddenException())
-      class HandlerWithOnDeny {
-        @Feature("X", { onDeny })
-        public method(): void {}
-      }
-      const guard = await createGuard({
-        resolve: async () => {
-          throw boom
-        },
+    describe("When onDeny returns a non-Error value", () => {
+      it("Then the value is thrown as-is (consumer's responsibility)", async () => {
+        class StringReturn {
+          @Feature("X", { onDeny: () => "denied" as unknown as Error })
+          public method(): void {}
+        }
+        const { guard } = await resolveGuard(jest.fn().mockResolvedValue(false))
+        await expect(
+          guard.canActivate(ctxFor(StringReturn, "method")),
+        ).rejects.toBe("denied")
       })
-      await expect(
-        guard.canActivate(ctxFor(HandlerWithOnDeny, "method")),
-      ).rejects.toBe(boom)
-      expect(onDeny).not.toHaveBeenCalled()
-    })
-  })
-
-  describe("Given @Feature('X', { onDeny }) on the deny path", () => {
-    it("Then the value returned by onDeny is thrown (not NotFoundException)", async () => {
-      const guard = await createGuard({ flags: { X: false } })
-      await expect(
-        guard.canActivate(ctxFor(HandlerXWithOnDeny, "method")),
-      ).rejects.toBe(forbidden)
     })
 
-    it("Then onDeny runs even when nothing is configured (fail-closed)", async () => {
-      const onDeny = jest.fn().mockReturnValue(forbidden)
-      class FailClosed {
-        @Feature("X", { onDeny })
-        public method(): void {}
-      }
-      const guard = await createGuard()
-      await expect(
-        guard.canActivate(ctxFor(FailClosed, "method")),
-      ).rejects.toBe(forbidden)
-      expect(onDeny).toHaveBeenCalledTimes(1)
-    })
-
-    it("Then an onDeny that throws synchronously propagates the thrown value", async () => {
-      const boom = new Error("onDeny exploded")
-      class Throws {
-        @Feature("X", {
-          onDeny: () => {
-            throw boom
-          },
-        })
-        public method(): void {}
-      }
-      const guard = await createGuard({ flags: { X: false } })
-      await expect(guard.canActivate(ctxFor(Throws, "method"))).rejects.toBe(
-        boom,
-      )
-    })
-
-    it("Then a non-Error return value is thrown as-is (consumer's responsibility)", async () => {
-      class StringReturn {
-        @Feature("X", { onDeny: () => "denied" as unknown as Error })
-        public method(): void {}
-      }
-      const guard = await createGuard({ flags: { X: false } })
-      await expect(
-        guard.canActivate(ctxFor(StringReturn, "method")),
-      ).rejects.toBe("denied")
-    })
-
-    it("Then onDeny runs when an async resolver denies X (no static flag present)", async () => {
-      const guard = await createGuard({
-        resolve: async () => ({ X: false }),
-      })
-      await expect(
-        guard.canActivate(ctxFor(HandlerXWithOnDeny, "method")),
-      ).rejects.toBe(forbidden)
-    })
-  })
-
-  describe("Given @Feature('X', { onDeny }) on the admit path", () => {
-    const admitCases: Array<[string, FeaturesModuleOptions]> = [
-      ["flags admit", { flags: { X: true } }],
-      ["the resolver admits", { resolve: async () => ({ X: true }) }],
-    ]
-
-    admitCases.forEach(([label, options]) => {
-      it(`Then onDeny is not invoked when ${label}`, async () => {
+    describe("When onDeny is set but isEnabled admits", () => {
+      it("Then onDeny is not invoked", async () => {
         const onDeny = jest.fn()
         class Admitted {
           @Feature("X", { onDeny })
           public method(): void {}
         }
-        const guard = await createGuard(options)
+        const { guard } = await resolveGuard(jest.fn().mockResolvedValue(true))
         await expect(
           guard.canActivate(ctxFor(Admitted, "method")),
         ).resolves.toBe(true)
         expect(onDeny).not.toHaveBeenCalled()
       })
     })
-  })
 
-  describe("Given controller-and-handler onDeny combinations (no field inheritance)", () => {
-    it("Then a handler without options fully overrides class-level onDeny (falls back to 404)", async () => {
-      const guard = await createGuard({ flags: { HANDLER_FLAG: false } })
-      await expect(
-        guard.canActivate(ctxFor(ClassOnDenyHandlerPlain, "method")),
-      ).rejects.toThrow(NotFoundException)
-    })
-
-    it("Then a handler-level onDeny is used when the class has none", async () => {
-      const guard = await createGuard({ flags: { HANDLER_FLAG: false } })
-      await expect(
-        guard.canActivate(ctxFor(ClassPlainHandlerOnDeny, "method")),
-      ).rejects.toBe(forbidden)
-    })
-
-    it("Then a class-level onDeny is used when no handler-level @Feature is present", async () => {
-      const guard = await createGuard({ flags: { CLASS_FLAG: false } })
-      await expect(
-        guard.canActivate(ctxFor(ClassOnlyOnDeny, "method")),
-      ).rejects.toBe(forbidden)
-    })
-
-    it("Then the handler-level onDeny fully overrides the class-level onDeny", async () => {
-      const guard = await createGuard({ flags: { X: false } })
-      await expect(
-        guard.canActivate(ctxFor(ClassAndHandlerOnDeny, "method")),
-      ).rejects.toBeInstanceOf(ConflictException)
-    })
-  })
-
-  describe("Given non-strict-true values for the gated flag", () => {
-    const cases: Array<[string, unknown]> = [
-      ['string "true"', "true"],
-      ["number 1", 1],
-      ["empty object {}", {}],
-    ]
-
-    cases.forEach(([label, value]) => {
-      it(`Then flags: { X: ${label} } denies (strict === true only)`, async () => {
-        const guard = await createGuard({
-          flags: { X: value as unknown as boolean },
-        })
+    describe("When onDeny is invoked", () => {
+      it("Then it receives the in-flight express Request", async () => {
+        const req = express.request()
+        const onDeny = jest.fn().mockReturnValue(new ForbiddenException())
+        class HandlerWithOnDeny {
+          @Feature("X", { onDeny })
+          public method(): void {}
+        }
+        const { guard } = await resolveGuard(jest.fn().mockResolvedValue(false))
         await expect(
-          guard.canActivate(ctxFor(HandlerX, "method")),
+          guard.canActivate(ctxFor(HandlerWithOnDeny, "method", req)),
+        ).rejects.toBeInstanceOf(ForbiddenException)
+        expect(onDeny).toHaveBeenCalledTimes(1)
+        expect(onDeny.mock.calls[0][0]).toBe(req)
+      })
+    })
+  })
+
+  describe("Given @Feature on both controller and handler", () => {
+    describe("When the handler-level flag is the one checked", () => {
+      it("Then isEnabled is called with the handler flag, not the class flag", async () => {
+        const isEnabled = jest.fn().mockResolvedValue(true)
+        const { guard } = await resolveGuard(isEnabled)
+        await expect(
+          guard.canActivate(ctxFor(ClassAndHandler, "method")),
+        ).resolves.toBe(true)
+        expect(isEnabled).toHaveBeenCalledWith("HANDLER_FLAG")
+        expect(isEnabled).not.toHaveBeenCalledWith("CLASS_FLAG")
+      })
+    })
+
+    describe("When the handler has no options and the class has onDeny", () => {
+      it("Then class-level onDeny is discarded and the guard falls back to NotFoundException", async () => {
+        const { guard } = await resolveGuard(jest.fn().mockResolvedValue(false))
+        await expect(
+          guard.canActivate(ctxFor(ClassOnDenyHandlerPlain, "method")),
         ).rejects.toThrow(NotFoundException)
       })
+    })
 
-      it(`Then a resolver returning { X: ${label} } denies (strict === true only)`, async () => {
-        const guard = await createGuard({
-          resolve: async () =>
-            ({ X: value }) as unknown as Record<string, boolean>,
-        })
+    describe("When the class has no onDeny and the handler does", () => {
+      it("Then the handler-level onDeny is used", async () => {
+        const { guard } = await resolveGuard(jest.fn().mockResolvedValue(false))
         await expect(
-          guard.canActivate(ctxFor(HandlerX, "method")),
-        ).rejects.toThrow(NotFoundException)
+          guard.canActivate(ctxFor(ClassPlainHandlerOnDeny, "method")),
+        ).rejects.toBe(forbidden)
+      })
+    })
+
+    describe("When both class and handler have onDeny", () => {
+      it("Then the handler-level onDeny fully overrides the class-level onDeny", async () => {
+        const { guard } = await resolveGuard(jest.fn().mockResolvedValue(false))
+        await expect(
+          guard.canActivate(ctxFor(ClassAndHandlerOnDeny, "method")),
+        ).rejects.toBeInstanceOf(ConflictException)
       })
     })
   })

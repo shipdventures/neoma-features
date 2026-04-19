@@ -3,6 +3,8 @@ import { Module } from "@nestjs/common"
 import { FeaturesModule, type FeaturesModuleOptions } from "@lib"
 
 import { AppController } from "./app.controller"
+import { DocumentsController } from "./documents.controller"
+import { DocumentsService } from "./documents.service"
 import { GatedDynamicController } from "./gated-dynamic.controller"
 import { GatedEnabledController } from "./gated-enabled.controller"
 import { GatedMissingController } from "./gated-missing.controller"
@@ -24,12 +26,13 @@ import { UserFeaturesService } from "./user-features.service"
           ENABLED_FEATURE: true,
           DISABLED_FEATURE: false,
         },
-        resolve: () => users.featuresFor(),
+        resolve: (req) => users.featuresFor(req),
       }),
     }),
   ],
   controllers: [
     AppController,
+    DocumentsController,
     GatedController,
     GatedDynamicController,
     GatedEnabledController,
@@ -37,5 +40,6 @@ import { UserFeaturesService } from "./user-features.service"
     OnDenyController,
     OnDenyClassOverrideController,
   ],
+  providers: [DocumentsService],
 })
 export class AsyncAppModule {}
