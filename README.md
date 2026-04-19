@@ -222,6 +222,32 @@ The factory receives the live express `Request` — the same one the resolver wo
 
 **Whatever you return is thrown.** The guard throws the value returned by `onDeny` as-is. Typically that's an `HttpException` subclass (`ForbiddenException`, `UnauthorizedException`, etc.) so Nest's default exception filter formats the response — but you can return any value as long as your exception pipeline can handle it. It's the consumer's responsibility.
 
+### 6. Programmatic Checks Inside a Handler
+
+`@Feature` gates a whole route. Some handlers need to always run but branch internally — for example, *always* accept a document upload, but only compute an AI summary when `DOCUMENT_AI_SUMMARY` is enabled for this request. Inject `FeaturesService` and call `isEnabled(name)`:
+
+```typescript
+import { Injectable } from "@nestjs/common"
+import { FeaturesService } from "@neoma/features"
+
+@Injectable()
+export class DocumentsService {
+  constructor(private readonly features: FeaturesService) {}
+
+  async upload(file: Buffer) {
+    const doc = await this.store(file)
+    if (await this.features.isEnabled("DOCUMENT_AI_SUMMARY")) {
+      doc.summary = await this.summarise(file)
+    }
+    return doc
+  }
+}
+```
+
+`isEnabled` evaluates the exact admit rule the guard evaluates for `@Feature(name)` on the same request (`flags[name] === true || (await resolve(req))[name] === true`). The resolver is invoked on every call — no memoisation. If caching matters, memoise inside your own resolver.
+
+`FeaturesService` is `Scope.REQUEST` — inject it into request-scoped or per-call providers. Do not inject it into a singleton's construction path; DI will either fail or promote the singleton to request scope.
+
 ## How It Works
 
 - A global `APP_GUARD` reads `@Feature` metadata from the handler and controller.
@@ -323,6 +349,18 @@ type FeatureOnDeny = (req: Request) => unknown
 ```
 
 Invoked only on deny. Receives the live express `Request`. Whatever it returns is thrown by the guard as-is — typically an `HttpException` subclass (e.g. `ForbiddenException`) so Nest's default exception filter formats the response. Any other value works too provided your exception pipeline handles it; that's the consumer's responsibility.
+
+### `FeaturesService`
+
+Request-scoped service for programmatic flag checks from inside a handler or service. Mirrors the guard's admit rule exactly.
+
+```typescript
+class FeaturesService {
+  isEnabled(name: string): Promise<boolean>
+}
+```
+
+Inject into request-scoped or per-call providers — not singleton construction paths.
 
 ## License
 
