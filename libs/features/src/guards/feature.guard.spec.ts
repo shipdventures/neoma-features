@@ -4,7 +4,6 @@ import {
   ForbiddenException,
   NotFoundException,
 } from "@nestjs/common"
-import { ContextIdFactory } from "@nestjs/core"
 import { Test } from "@nestjs/testing"
 import { express } from "fixtures/express"
 import { executionContext } from "fixtures/nestjs"
@@ -25,7 +24,7 @@ async function resolveGuard(
     ],
   }).compile()
 
-  const guard = await moduleRef.resolve(FeatureGuard, ContextIdFactory.create())
+  const guard = await moduleRef.resolve(FeatureGuard)
   return { guard, isEnabled }
 }
 
