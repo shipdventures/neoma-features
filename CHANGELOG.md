@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-19
+
 ### Added
 - Injectable `FeaturesService` with `isEnabled(name)` for in-handler flag branching. Use it when a handler must always run but a downstream step must be conditional on the flag (e.g. accept an upload but only compute an AI summary when `DOCUMENT_AI_SUMMARY` is enabled for the current request). The service is `Scope.REQUEST`; inject it into request-scoped or per-call providers — not singleton construction paths. `isEnabled` mirrors the `FeatureGuard` admit rule exactly (`flags[name] === true || (await resolve?.(req))?.[name] === true`), re-evaluating the resolver on every call (no memoisation).
 
@@ -45,7 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Handler-level `@Feature` overrides controller-level `@Feature` (most specific wins)
 - Fail-closed semantics — a flag key absent from the record is treated as disabled
 
-[Unreleased]: https://github.com/shipdventures/neoma-features/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/shipdventures/neoma-features/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/shipdventures/neoma-features/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/shipdventures/neoma-features/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/shipdventures/neoma-features/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/shipdventures/neoma-features/releases/tag/v0.1.0
