@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Injectable `FeaturesService` with `isEnabled(name)` for in-handler flag branching. Use it when a handler must always run but a downstream step must be conditional on the flag (e.g. accept an upload but only compute an AI summary when `DOCUMENT_AI_SUMMARY` is enabled for the current request). The service is `Scope.REQUEST`; inject it into request-scoped or per-call providers — not singleton construction paths. `isEnabled` mirrors the `FeatureGuard` admit rule exactly (`flags[name] === true || (await resolve?.(req))?.[name] === true`), re-evaluating the resolver on every call (no memoisation).
 
 ### Changed
-- `FeatureGuard` now delegates its admit decision to `FeaturesService`, resolving it per request via `ModuleRef` + `ContextIdFactory.getByRequest`. All admit logic lives in one place, guaranteeing guard and `isEnabled` can never drift. No observable behaviour change — existing e2e specs pass unchanged.
+- `FeatureGuard` now delegates its admit decision to `FeaturesService`. The guard is request-scoped and injects `FeaturesService` directly, so the two always share the same view of the in-flight request and their admit rules can never drift. No observable behaviour change — existing e2e specs pass unchanged.
 
 ## [0.3.0] - 2026-04-18
 

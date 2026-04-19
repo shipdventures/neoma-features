@@ -3,8 +3,9 @@ import {
   type ExecutionContext,
   Injectable,
   NotFoundException,
+  Scope,
 } from "@nestjs/common"
-import { ContextIdFactory, ModuleRef } from "@nestjs/core"
+import { Reflector } from "@nestjs/core"
 import type { Request } from "express"
 
 import { FEATURE_KEY } from "../decorators/feature.decorator"
@@ -19,26 +20,26 @@ interface FeatureMetadata {
 /**
  * Guard that enforces feature flag gating.
  *
- * Reads the `@Feature` metadata from the handler or controller using raw
- * `Reflect.getMetadata` and delegates the admit decision to the
- * request-scoped `FeaturesService`. Throws `NotFoundException` by default,
- * or the value returned by the decorator's `onDeny` factory when one is
- * supplied (fail-closed). Routes without `@Feature` metadata are allowed
- * through unconditionally.
+ * Reads the `@Feature` metadata from the handler or controller via the
+ * `Reflector` and delegates the admit decision to the request-scoped
+ * `FeaturesService`. Throws `NotFoundException` by default, or the value
+ * returned by the decorator's `onDeny` factory when one is supplied
+ * (fail-closed). Routes without `@Feature` metadata are allowed through
+ * unconditionally.
  *
  * Handler-level metadata takes priority over class-level metadata. The
- * guard itself is a singleton (registered via `APP_GUARD`), so it obtains
- * the request-scoped `FeaturesService` per call via `ModuleRef.resolve`
- * keyed by the in-flight request's `ContextId`. Using
- * `ContextIdFactory.getByRequest(req)` — not `.create()` — is what keeps
- * the service's DI tree (and therefore its view of the live `Request`)
- * aligned with the rest of the request-scoped graph.
+ * guard itself is request-scoped so it can accept `FeaturesService` as a
+ * direct constructor dependency — both share the same request-scoped DI
+ * subtree.
  *
  * @internal Registered globally via `APP_GUARD` -- not exported.
  */
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class FeatureGuard implements CanActivate {
-  public constructor(private readonly moduleRef: ModuleRef) {}
+  public constructor(
+    private readonly reflector: Reflector,
+    private readonly features: FeaturesService,
+  ) {}
 
   /**
    * Checks whether the requested route's feature flag is enabled.
@@ -52,38 +53,21 @@ export class FeatureGuard implements CanActivate {
    *   exception filter is responsible for handling it.
    */
   public async canActivate(context: ExecutionContext): Promise<boolean> {
-    const handler = context.getHandler()
-    const cls = context.getClass()
+    const metadata = this.reflector.getAllAndOverride<FeatureMetadata>(
+      FEATURE_KEY,
+      [context.getHandler(), context.getClass()],
+    )
 
-    const metadata: FeatureMetadata | undefined =
-      Reflect.getMetadata(FEATURE_KEY, handler) ??
-      Reflect.getMetadata(FEATURE_KEY, cls)
-
-    if (metadata === undefined) {
+    if (!metadata) {
       return true
     }
 
-    const req = context.switchToHttp().getRequest<Request>()
-    const contextId = ContextIdFactory.getByRequest(req)
-    // When the target controller is fully static (singleton), Nest's
-    // router skips its per-request setup and REQUEST is never registered
-    // for this contextId. Register it ourselves so the request-scoped
-    // FeaturesService receives the in-flight request. This is a no-op
-    // when Nest has already registered the request (idempotent).
-    this.moduleRef.registerRequestByContextId(req, contextId)
-    const features = await this.moduleRef.resolve(FeaturesService, contextId, {
-      strict: false,
-    })
-
-    const enabled = await features.isEnabled(metadata.flag)
+    const enabled = await this.features.isEnabled(metadata.flag)
     if (enabled) {
       return true
     }
 
-    const { onDeny } = metadata
-    if (onDeny) {
-      throw onDeny(req)
-    }
-    throw new NotFoundException()
+    const req = context.switchToHttp().getRequest<Request>()
+    throw metadata.onDeny?.(req) ?? new NotFoundException()
   }
 }

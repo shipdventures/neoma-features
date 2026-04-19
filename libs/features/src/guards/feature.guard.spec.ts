@@ -4,8 +4,9 @@ import {
   ForbiddenException,
   NotFoundException,
 } from "@nestjs/common"
-import { ContextIdFactory, ModuleRef } from "@nestjs/core"
+import { ContextIdFactory } from "@nestjs/core"
 import { Test } from "@nestjs/testing"
+import type { Request } from "express"
 import { express } from "fixtures/express"
 import { executionContext } from "fixtures/nestjs"
 
@@ -16,22 +17,28 @@ import { FeaturesService } from "../services/features.service"
 import { FeatureGuard } from "./feature.guard"
 
 /**
- * Build a guard wired to a stub `FeaturesService` whose `isEnabled`
- * behaviour is controlled by the test. The stub is registered in a real
- * testing module so the guard's `moduleRef.resolve(FeaturesService, ...)`
- * lookup returns the stub — exactly the code path production runs.
+ * Resolve a request-scoped `FeatureGuard` wired to a stub
+ * `FeaturesService` whose `isEnabled` behaviour the test controls. We
+ * build a real testing module, bind a fake express request to a fresh
+ * `ContextId`, then `moduleRef.resolve` to obtain the per-test guard
+ * instance — the same DI path production uses.
  */
-async function createGuard(
+async function resolveGuard(
   isEnabled: jest.Mock = jest.fn().mockResolvedValue(true),
+  req: Request = express.request() as unknown as Request,
 ): Promise<{ guard: FeatureGuard; isEnabled: jest.Mock }> {
-  const module = await Test.createTestingModule({
+  const moduleRef = await Test.createTestingModule({
     providers: [
       FeatureGuard,
       { provide: FeaturesService, useValue: { isEnabled } },
     ],
   }).compile()
 
-  return { guard: module.get(FeatureGuard), isEnabled }
+  const contextId = ContextIdFactory.create()
+  moduleRef.registerRequestByContextId(req, contextId)
+
+  const guard = await moduleRef.resolve(FeatureGuard, contextId)
+  return { guard, isEnabled }
 }
 
 function ctxFor(
@@ -96,8 +103,8 @@ class ClassAndHandlerOnDeny {
 describe("FeatureGuard", () => {
   describe("Given a route with no @Feature metadata", () => {
     describe("When canActivate is called", () => {
-      it("Then it returns true without resolving FeaturesService", async () => {
-        const { guard, isEnabled } = await createGuard()
+      it("Then it returns true without calling FeaturesService.isEnabled", async () => {
+        const { guard, isEnabled } = await resolveGuard()
         await expect(
           guard.canActivate(ctxFor(Ungated, "method")),
         ).resolves.toBe(true)
@@ -108,9 +115,9 @@ describe("FeatureGuard", () => {
 
   describe("Given a handler with @Feature('X') metadata", () => {
     describe("When FeaturesService.isEnabled resolves true", () => {
-      it("Then canActivate admits (returns true)", async () => {
+      it("Then canActivate admits (returns true) and delegates with the handler flag", async () => {
         const isEnabled = jest.fn().mockResolvedValue(true)
-        const { guard } = await createGuard(isEnabled)
+        const { guard } = await resolveGuard(isEnabled)
         await expect(
           guard.canActivate(ctxFor(HandlerX, "method")),
         ).resolves.toBe(true)
@@ -121,7 +128,7 @@ describe("FeatureGuard", () => {
     describe("When FeaturesService.isEnabled resolves false and no onDeny is set", () => {
       it("Then canActivate throws NotFoundException", async () => {
         const isEnabled = jest.fn().mockResolvedValue(false)
-        const { guard } = await createGuard(isEnabled)
+        const { guard } = await resolveGuard(isEnabled)
         await expect(
           guard.canActivate(ctxFor(HandlerX, "method")),
         ).rejects.toThrow(NotFoundException)
@@ -136,7 +143,7 @@ describe("FeatureGuard", () => {
           @Feature("X", { onDeny })
           public method(): void {}
         }
-        const { guard } = await createGuard(jest.fn().mockRejectedValue(boom))
+        const { guard } = await resolveGuard(jest.fn().mockRejectedValue(boom))
         await expect(
           guard.canActivate(ctxFor(HandlerWithOnDeny, "method")),
         ).rejects.toBe(boom)
@@ -148,7 +155,7 @@ describe("FeatureGuard", () => {
   describe("Given @Feature with an onDeny factory on the deny path", () => {
     describe("When FeaturesService.isEnabled resolves false", () => {
       it("Then the value returned by onDeny is thrown (not NotFoundException)", async () => {
-        const { guard } = await createGuard(jest.fn().mockResolvedValue(false))
+        const { guard } = await resolveGuard(jest.fn().mockResolvedValue(false))
         await expect(
           guard.canActivate(ctxFor(HandlerXWithOnDeny, "method")),
         ).rejects.toBe(forbidden)
@@ -166,7 +173,7 @@ describe("FeatureGuard", () => {
           })
           public method(): void {}
         }
-        const { guard } = await createGuard(jest.fn().mockResolvedValue(false))
+        const { guard } = await resolveGuard(jest.fn().mockResolvedValue(false))
         await expect(guard.canActivate(ctxFor(Throws, "method"))).rejects.toBe(
           boom,
         )
@@ -179,7 +186,7 @@ describe("FeatureGuard", () => {
           @Feature("X", { onDeny: () => "denied" as unknown as Error })
           public method(): void {}
         }
-        const { guard } = await createGuard(jest.fn().mockResolvedValue(false))
+        const { guard } = await resolveGuard(jest.fn().mockResolvedValue(false))
         await expect(
           guard.canActivate(ctxFor(StringReturn, "method")),
         ).rejects.toBe("denied")
@@ -193,11 +200,31 @@ describe("FeatureGuard", () => {
           @Feature("X", { onDeny })
           public method(): void {}
         }
-        const { guard } = await createGuard(jest.fn().mockResolvedValue(true))
+        const { guard } = await resolveGuard(jest.fn().mockResolvedValue(true))
         await expect(
           guard.canActivate(ctxFor(Admitted, "method")),
         ).resolves.toBe(true)
         expect(onDeny).not.toHaveBeenCalled()
+      })
+    })
+
+    describe("When onDeny is invoked", () => {
+      it("Then it receives the in-flight express Request", async () => {
+        const req = express.request()
+        const onDeny = jest.fn().mockReturnValue(new ForbiddenException())
+        class HandlerWithOnDeny {
+          @Feature("X", { onDeny })
+          public method(): void {}
+        }
+        const { guard } = await resolveGuard(
+          jest.fn().mockResolvedValue(false),
+          req as unknown as Request,
+        )
+        await expect(
+          guard.canActivate(ctxFor(HandlerWithOnDeny, "method", req)),
+        ).rejects.toBeInstanceOf(ForbiddenException)
+        expect(onDeny).toHaveBeenCalledTimes(1)
+        expect(onDeny.mock.calls[0][0]).toBe(req)
       })
     })
   })
@@ -206,7 +233,7 @@ describe("FeatureGuard", () => {
     describe("When the handler-level flag is the one checked", () => {
       it("Then isEnabled is called with the handler flag, not the class flag", async () => {
         const isEnabled = jest.fn().mockResolvedValue(true)
-        const { guard } = await createGuard(isEnabled)
+        const { guard } = await resolveGuard(isEnabled)
         await expect(
           guard.canActivate(ctxFor(ClassAndHandler, "method")),
         ).resolves.toBe(true)
@@ -217,7 +244,7 @@ describe("FeatureGuard", () => {
 
     describe("When the handler has no options and the class has onDeny", () => {
       it("Then class-level onDeny is discarded and the guard falls back to NotFoundException", async () => {
-        const { guard } = await createGuard(jest.fn().mockResolvedValue(false))
+        const { guard } = await resolveGuard(jest.fn().mockResolvedValue(false))
         await expect(
           guard.canActivate(ctxFor(ClassOnDenyHandlerPlain, "method")),
         ).rejects.toThrow(NotFoundException)
@@ -226,7 +253,7 @@ describe("FeatureGuard", () => {
 
     describe("When the class has no onDeny and the handler does", () => {
       it("Then the handler-level onDeny is used", async () => {
-        const { guard } = await createGuard(jest.fn().mockResolvedValue(false))
+        const { guard } = await resolveGuard(jest.fn().mockResolvedValue(false))
         await expect(
           guard.canActivate(ctxFor(ClassPlainHandlerOnDeny, "method")),
         ).rejects.toBe(forbidden)
@@ -235,43 +262,10 @@ describe("FeatureGuard", () => {
 
     describe("When both class and handler have onDeny", () => {
       it("Then the handler-level onDeny fully overrides the class-level onDeny", async () => {
-        const { guard } = await createGuard(jest.fn().mockResolvedValue(false))
+        const { guard } = await resolveGuard(jest.fn().mockResolvedValue(false))
         await expect(
           guard.canActivate(ctxFor(ClassAndHandlerOnDeny, "method")),
         ).rejects.toBeInstanceOf(ConflictException)
-      })
-    })
-  })
-
-  describe("Given the guard is driven with a stub ModuleRef", () => {
-    describe("When canActivate is invoked for a gated route", () => {
-      it("Then it resolves FeaturesService via moduleRef.resolve using a contextId derived from the request and strict: false", async () => {
-        const req = express.request()
-        const getByRequestSpy = jest.spyOn(ContextIdFactory, "getByRequest")
-        const isEnabled = jest.fn().mockResolvedValue(true)
-        const stubService = { isEnabled }
-        const resolve = jest.fn().mockResolvedValue(stubService)
-        const registerRequestByContextId = jest.fn()
-        const moduleRef = {
-          resolve,
-          registerRequestByContextId,
-        } as unknown as ModuleRef
-        const guard = new FeatureGuard(moduleRef)
-
-        await expect(
-          guard.canActivate(ctxFor(HandlerX, "method", req)),
-        ).resolves.toBe(true)
-
-        expect(getByRequestSpy).toHaveBeenCalledWith(req)
-        const contextId = getByRequestSpy.mock.results[0].value
-        expect(registerRequestByContextId).toHaveBeenCalledWith(req, contextId)
-        expect(resolve).toHaveBeenCalledTimes(1)
-        expect(resolve).toHaveBeenCalledWith(FeaturesService, contextId, {
-          strict: false,
-        })
-        expect(isEnabled).toHaveBeenCalledWith("X")
-
-        getByRequestSpy.mockRestore()
       })
     })
   })
