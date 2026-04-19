@@ -50,6 +50,15 @@ import {
  */
 @Injectable({ scope: Scope.REQUEST })
 export class FeaturesService {
+  /**
+   * @param options - Module options resolved at bootstrap via the
+   *   `FEATURES_OPTIONS` token. Holds the static `flags` map and the optional
+   *   per-request `resolve` function that this service must mirror exactly.
+   * @param request - The in-flight express `Request`, injected via Nest's
+   *   `REQUEST` token. The service is `Scope.REQUEST` so each HTTP call
+   *   receives its own instance bound to its own request, which is then
+   *   passed unchanged to the consumer's resolver.
+   */
   public constructor(
     @Inject(FEATURES_OPTIONS)
     private readonly options: FeaturesModuleOptions,
